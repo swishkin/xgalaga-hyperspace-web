@@ -3,6 +3,7 @@
 .env
 !leaderboard.py
 !index.html
+!debug_webui.js
 !xgalaga.js
 !favicon.ico
 !icon.png
