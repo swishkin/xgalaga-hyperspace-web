@@ -27,6 +27,8 @@ WORKDIR /app
 COPY xgalaga-2.1.1.0/web/leaderboard.py ./
 COPY xgalaga-2.1.1.0/web/index.html ./www/
 COPY xgalaga-2.1.1.0/web/xgalaga.js ./www/
+COPY xgalaga-2.1.1.0/web/favicon.ico ./www/
+COPY xgalaga-2.1.1.0/web/icon.png ./www/
 
 # Scores persist in /data (mount a volume there). The server runs as
 # 'nobody', so the directory must be owned by that user.

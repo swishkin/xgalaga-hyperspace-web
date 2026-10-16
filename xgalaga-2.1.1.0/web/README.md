@@ -216,6 +216,7 @@ separately-cached scripts (and matches the single-file deliverable).
 | `leaderboard_web.c` | —                    | C↔JS bridge for the shared high-score board: `xgal_web_submit()` (C → JS fetch POST on name entry), `xgal_web_refresh()` (JS → C, reload the global score file after the JS layer fetches the board), `xgal_web_getting_name()` (JS → C, name-prompt state so the input bridge types literal characters) |
 | `webglue.js`      | —                       | browser side: keyboard/mouse → event queue, audio unlock/playback, canvas setup, leaderboard fetch/submit; prepended to `xgalaga.js` at build time |
 | `leaderboard.py`  | —                       | self-hosted game + high-score API server (stdlib only); see High scores |
+| `favicon.ico`, `icon.png` | — | page favicon: the player-ship sprite (`images/player1.xpm`, frame 1) at 16/32/48/64 px (`.ico`) and 512 px (`.png`), nearest-neighbor scaled, transparency kept; the original X11 build sets no window icon (verified against the stock 2.1.1.0 source), so this sprite is the game's canonical icon |
 | `config.h`        | `./configure` output    | hand-written build configuration             |
 | `CREDITS`         | `CREDITS` (in repo root) | the scroll-credits text, embedded at build time at `/tmp/xgal_credits` |
 | `mksounddata.py`  | —                       | generates `sounddata.h` from `sounds/*.raw`  |
