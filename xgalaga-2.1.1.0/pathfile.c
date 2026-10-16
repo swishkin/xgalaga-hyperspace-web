@@ -386,7 +386,7 @@ int get_path(int anum)
     return al_paths[anum];
 }
 
-void get_xy(int anum, int* x, int* y)
+void get_xy(int anum, float* x, float* y)
 {
     *x = (WINWIDTH  * pathinfo[al_paths[anum]].startx) / 400;
     *y = (WINHEIGHT * pathinfo[al_paths[anum]].starty) / 500;
@@ -394,7 +394,7 @@ void get_xy(int anum, int* x, int* y)
 
 int get_delay(int anum)
 {
-    return al_delays[anum];
+    return al_delays[anum] * 2;  /* 30Hz frames -> 60Hz ticks */
 }
 
 int get_dir(int pnum, int pos)
@@ -404,7 +404,7 @@ int get_dir(int pnum, int pos)
 
 int get_duration(int pnum, int pos)
 {
-    return epaths[pnum][pos].duration;
+    return epaths[pnum][pos].duration * 2;  /* 30Hz frames -> 60Hz ticks */
 }
 
 int get_shape(int anum)

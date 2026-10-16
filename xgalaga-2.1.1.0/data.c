@@ -59,10 +59,10 @@ int alien_shape[ALIENSHAPES] = {
 int weapon = 0;
 int maxtorps = 4, numtorps = 0;
 
-int plx = 200;
+float plx = 200;
 int pldead = 0;
 
-int movespeed = MINSPEED;
+float movespeed = MINSPEED;
 
 #ifdef SOUND
 char *unixSoundPath=SOUNDDIR;
@@ -76,7 +76,7 @@ int plshield = 0;
 int shieldsleft = 0;
 int shieldon = 0;
 
-int title_page=0, pagetimer=300;
+int title_page=0, pagetimer=600; /* was 300 @ 30Hz: doubled for 60Hz */
 
 int gotlemon = 0;
 

@@ -295,7 +295,7 @@ int score_key(W_Event *ev)
 	    getting_name = 0;
 	    add_score(new_name, score);
 	    title_page = 1;
-	    pagetimer = 300;
+	    pagetimer = 600;   /* was 300 @ 30Hz: doubled ticks */
 	    W_ClearWindow(baseWin);
 	    break;
 	  case 8:

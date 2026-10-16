@@ -22,16 +22,17 @@
 /* for scrolling credits */
 const int LINESIZE= 70;
 const int VISIBLELINES=7;
-const int SPEEDFACTOR=5;
+const int SPEEDFACTOR=10;  /* was 5 @ 30Hz: doubled ticks for same scroll rate */
 char *gchLBuf;
 int giCreditLines=0, giActCreditLine=0;
 
 W_Image *pauseImage, *titleImage;
-int pausex, pausey, pauseyspeed=1;
+int pausex;
+float pausey, pauseyspeed=1;
 
 void undo_pause()
 {
-    W_CacheClearArea(baseWin, pausex-(pauseImage->width/2), pausey-(pauseImage->height/2), 
+    W_CacheClearArea(baseWin, pausex-(pauseImage->width/2), PX(pausey-(pauseImage->height/2)), 
 		     pauseImage->width, pauseImage->height);
 }
 
@@ -41,7 +42,7 @@ void do_pause()
 	pauseyspeed = -pauseyspeed;
     pausey+=pauseyspeed;
 
-    W_DrawImage(baseWin, pausex-(pauseImage->width/2), pausey-(pauseImage->height/2), 0, pauseImage, W_White);
+    W_DrawImage(baseWin, pausex-(pauseImage->width/2), PX(pausey-(pauseImage->height/2)), 0, pauseImage, W_White);
 }
 
 void 
@@ -289,7 +290,7 @@ void do_title()
 	title_page++;
 	if (title_page > 1)
 	  title_page = 0;
-	pagetimer = 299;
+	pagetimer = 598;   /* was 299 @ 30Hz: doubled ticks, same page time */
     }
     show_credits();     // write text
 }
@@ -300,7 +301,7 @@ void init_titles()
     pauseImage = getImage(I_PAUSE);
     pausex = WINWIDTH/2;
     pausey = WINHEIGHT/2;
-    pauseyspeed = 3;
+    pauseyspeed = 1.5f;   /* was 3 px @ 30Hz: halved per tick */
     read_credits();
 }
 

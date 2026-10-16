@@ -6,18 +6,18 @@
 struct torp {
     struct torp *next, *prev;
     int alive, frame;
-    int x, y;
-    int xspeed, yspeed;
+    float x, y;
+    float xspeed, yspeed;
 };
 
 struct star {
-    int x, y;
-    int speed;
+    float x, y;
+    float speed;
     W_Color color;
 };
 
 struct alien {
-    int x, y;
+    float x, y;
     int dir;
     int steer;
     int alive;
@@ -30,14 +30,14 @@ struct alien {
 
 struct explosion {
     struct explosion *next, *prev;
-    int x, y;
+    float x, y;
     int frame;
     W_Image *shape;
 };
 
 struct score_bubble {
     struct score_bubble *next, *prev;
-    int x, y;
+    float x, y;
     int count;
     W_Image *shape;
 };

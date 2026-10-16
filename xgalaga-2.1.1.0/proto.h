@@ -23,8 +23,8 @@ void init_titles(void);
 /* explosions.c */
 void undo_explosions(void);
 void do_explosions(void);
-void new_explosion(int x, int y, int type);
-void score_flagship(int x, int y, int ne);
+void new_explosion(float x, float y, int type);
+void score_flagship(float x, float y, int ne);
 void init_explosions(void);
 /* score.c */
 void undo_score(void);
@@ -43,7 +43,7 @@ void load_scores(void);
 void print_scores(void);
 /* prize.c */
 void init_prizes(void);
-void new_prize(int x, int y);
+void new_prize(float x, float y);
 void undo_prizes(void);
 void do_prizes(void);
 /* sound.c */
@@ -54,7 +54,7 @@ void sound_completed(int k);
 void kill_sound(void);
 /* pathfile.c */
 int get_path(int);
-void get_xy(int, int*, int*);
+void get_xy(int, float*, float*);
 int get_delay(int);
 int get_dir(int, int);
 int get_duration(int, int);

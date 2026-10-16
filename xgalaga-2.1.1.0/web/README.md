@@ -121,7 +121,7 @@ separately-cached scripts (and matches the single-file deliverable).
 |-------------------|-------------------------|-----------------------------------------------|
 | `wlib_web.c`      | `libsprite/` (X11)      | Wlib API on a 32-bit software framebuffer blitted to a `<canvas>`; XPM decoder (handles this game's 12-digit byte-doubled colors, e.g. `#FFFF00000000` = `#FF0000`, the `XPMEXT num_views` sprite-frame count, and `None` transparency); bitmap font (static `fontdata.h`); all draws clipped to the window rect, mirroring X child-window clipping; input event queue |
 | `sound_web.c`     | `sound.c`               | Web Audio playback of the embedded 8-bit 8 kHz samples (original forks a `/dev/dsp` sound server) |
-| `frate_web.c`     | `frate.c`               | `emscripten_sleep(33)` frame pacing (~30 FPS; original uses SIGALRM/sigsuspend) |
+| `frate_web.c`     | `frate.c`               | `emscripten_sleep(16)` frame pacing (~60 FPS; original paces its 30 Hz tick with SIGALRM/sigsuspend — see Framerate note) |
 | `joystick_web.c`  | `linux-joystick.c`      | no-op (that file is `__linux__`-gated anyway) |
 | `webglue.js`      | —                       | browser side: keyboard/mouse → event queue, audio unlock/playback, canvas setup; prepended to `xgalaga.js` at build time |
 | `config.h`        | `./configure` output    | hand-written build configuration             |
@@ -151,14 +151,28 @@ interpretation:
   The score strip lives in the top-level shell window, so sprites entering
   the play window from above cannot overwrite it, as on a real display.
 - **Framerate** — the game is a fixed-timestep simulation: every speed is
-  in pixels-per-frame and every timer a frame counter, and one main-loop
+  in pixels-per-tick and every timer a tick counter, and one main-loop
   iteration is one simulation step plus one render plus one frame tick.
   The original paces that loop at 30 Hz (`frate.c`, `#define FPS 30`,
-  ITIMER_REAL + sigsuspend) regardless of the display's refresh rate, and
-  this build does the same (`web/frate_web.c`, `emscripten_sleep(33)`,
-  measured ≈ 30 FPS). There is no "unlocked" mode in the original to
-  replicate: running the loop faster would run the *game* faster (all
-  motion and timers scale with the tick), and rendering more frames per
-  tick would only repeat the same state, since the original does no
-  interpolation between steps.
+  ITIMER_REAL + sigsuspend) regardless of the display's refresh rate. This
+  build paces it at **60 Hz** (`web/frate_web.c`, `emscripten_sleep(16)`,
+  measured ≈ 60.4 Hz: the title page's 598-tick dwell measures 9.89 s) and
+  retimes the simulation so wall-clock speed is identical to the original:
+  per-tick speeds are halved (torps 12→6 px/tick, enemy torps 8→4, ship
+  movement ±4/±3/±1→±2/±1.5/±0.5, star speeds, prize speed 3→1.5), every
+  tick-count duration is doubled (title/score page timers 300→600,
+  shield 300→600, death respawn 100→200, explosion 25→50, fire delay
+  5→10), per-tick fire probabilities are halved (random `% tc` →
+  `% 2*tc`, convoy attack `% 10000` → `% 20000`), and sprite animations
+  (player ship, torps, explosions, star color cycling) step once per 2
+  ticks to keep the original 30 Hz animation cadence. Path steering
+  doubles the path-table steer values at read-out (`paths.c`,
+  `pathfile.c`) with the turn rate doubled to match, so turn radius and
+  level geometry are unchanged. Positions and speeds are floats where
+  halving needs fractions; the Wlib draw API stays integer (rounded at the
+  call site), so a sprite may differ from the original by ≤ 1 px. There is
+  no "unlocked" mode in the original to replicate: running the loop faster
+  without the retiming would run the *game* faster, and rendering more
+  frames per tick would only repeat the same state, since the original
+  does no interpolation between steps.
 
