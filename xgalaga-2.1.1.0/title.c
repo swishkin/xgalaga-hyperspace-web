@@ -92,14 +92,14 @@ static void show_help()
 
     center_text("         Keyboard controls           ", top, W_Red);
     center_text("  j / l              move            ", top+10, W_Yellow);
-    center_text("  F                  fire            ", top+20, W_Yellow);
+    center_text("  f                  fire            ", top+20, W_Yellow);
     center_text("  p                  pause           ", top+30, W_Cyan);
     center_text("  q                  end game        ", top+40, W_Cyan);
     center_text("  Q                  quick quit      ", top+50, W_Cyan);
     center_text("  k                  keyboard control", top+60, W_Cyan);
     center_text("  m                  mouse control   ", top+70, W_Cyan);
 #ifndef ORIGINAL_XGALAGA
-    center_text("  D                  shield          ", top+80, W_Cyan);
+    center_text("  d                  shield          ", top+80, W_Cyan);
 #endif
 #ifdef SOUND
     center_text("  s                  toggle sound    ", top+90, W_Cyan);
