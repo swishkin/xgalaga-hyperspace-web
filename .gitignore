@@ -1,0 +1,6 @@
+web/xgalaga.js
+*.o
+*.o.hyper
+libsprite.a
+xgalaga
+xgalaga-hyperspace

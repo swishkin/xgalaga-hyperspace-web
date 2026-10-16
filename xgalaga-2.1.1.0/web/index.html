@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XGalaga: Hyperspace</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #xgalcanvas {
+    /* sized in whole pixels by the fitCanvas() script below */
+    image-rendering: pixelated;
+    cursor: crosshair;
+  }
+  #status {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 4px;
+    text-align: center;
+    color: #f00;
+    font: 14px monospace;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="status">Loading XGalaga…</div>
+<canvas id="xgalcanvas" width="468" height="596"></canvas>
+<script>
+  /* Integer (whole-pixel) scaling: crisp retro pixels instead of blurry
+   * fractional stretching.  Falls back to a fractional scale when the
+   * window is smaller than the 468x596 game screen. */
+  function fitCanvas() {
+    var c = document.getElementById("xgalcanvas");
+    var s = Math.min(window.innerWidth / c.width, window.innerHeight / c.height);
+    var whole = Math.floor(s);
+    s = whole >= 1 ? whole : s;
+    c.style.width = Math.round(c.width * s) + "px";
+    c.style.height = Math.round(c.height * s) + "px";
+  }
+  window.addEventListener("resize", fitCanvas);
+  fitCanvas();
+</script>
+
+<script>
+  var Module = {
+    canvas: document.getElementById("xgalcanvas"),
+    print: function (t) { console.log(t); },
+    printErr: function (t) {
+      console.error(t);
+      var s = document.getElementById("status");
+      s.style.display = "block";
+      s.textContent = t;
+    }
+  };
+  window.addEventListener("error", function (e) {
+    var s = document.getElementById("status");
+    s.style.display = "block";
+    s.textContent = "Error: " + (e.message || e.error);
+  });
+</script>
+<script src="xgalaga.js"></script>
+</body>
+</html>
