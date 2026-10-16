@@ -5,9 +5,9 @@
  *   - the page sets window.XGAL_DEBUG_WEBUI = true (see index.html), or
  *   - the URL contains ?debug
  *
- * The panel (below the game canvas, above the links row) polls the exported
- * C state (xgal_web_debug_state) and exposes setters for: start level + new
- * game, weapon type, max torps, ships, shields, ship speed, and pause.  The
+ * The panel (to the right of the game canvas) polls the exported C state
+ * (xgal_web_debug_state) and exposes setters for: start level + new game,
+ * weapon type, min torps, ships, shields, ship speed, and pause.  The
  * setters run between game-loop frames on the single emscripten thread, so
  * they work paused or unpaused.
  */
@@ -63,6 +63,7 @@
     function kv(label, id) {
         var s = document.createElement("span");
         s.innerHTML = label + " <b id=\"xgd-" + id + "\">-</b>";
+        s.style.cssText = "display:flex;justify-content:space-between";
         return s;
     }
 
@@ -76,18 +77,17 @@
         var panel = document.createElement("div");
         panel.id = "xgal-debug";
         panel.style.cssText =
-            "margin-top:6px;padding:6px 10px;background:#111;" +
+            "width:272px;margin-left:16px;padding:6px 10px;background:#111;" +
             "border:1px solid #444;color:#9f9;font:12px monospace;" +
-            "display:flex;flex-wrap:wrap;gap:3px 14px;align-items:center;" +
-            "max-width:700px;box-sizing:border-box";
+            "box-sizing:border-box;align-self:flex-start";
 
         var ro = document.createElement("div");
-        ro.style.cssText = "display:flex;flex-wrap:wrap;gap:2px 14px;width:100%";
+        ro.style.cssText = "display:flex;flex-direction:column;gap:2px;width:100%";
         ro.appendChild(kv("LVL", "lvl"));
         ro.appendChild(kv("META", "meta"));
         ro.appendChild(kv("SCORE", "score"));
         ro.appendChild(kv("SHIPS", "ships"));
-        ro.appendChild(kv("MAXT", "maxt"));
+        ro.appendChild(kv("MinTorps", "maxt"));
         ro.appendChild(kv("TORPS", "torps"));
         ro.appendChild(kv("ETORPS", "etorps"));
         ro.appendChild(kv("SPEED", "speed"));
@@ -155,7 +155,7 @@
         row([label("Weapon:"), wsel]);
 
         var mtIn = numInput("xgd-in-maxt", 1, 15, 3);
-        row([label("MaxT:"), mtIn,
+        row([label("MinTorps:"), mtIn,
              button("xgd-setmt", "Set", function () {
                  M._xgal_web_debug_set_maxtorps(parseInt(mtIn.value, 10) || 1);
              })]);
@@ -181,10 +181,25 @@
         var pauseBtn = button("xgd-pause", "Pause", null);
         row([pauseBtn]);
 
-        /* insert above the links row */
+        /* side layout: [canvas + links] in a left column, panel on the right */
+        var canvas = document.getElementById("xgalcanvas");
         var links = document.getElementById("xgal-links");
-        links ? links.parentNode.insertBefore(panel, links)
-              : document.body.appendChild(panel);
+        var varrow = document.createElement("div");
+        varrow.id = "xgal-row";
+        varrow.style.cssText =
+            "display:flex;align-items:flex-start;justify-content:center";
+        var left = document.createElement("div");
+        left.id = "xgal-left";
+        left.style.cssText =
+            "display:flex;flex-direction:column;align-items:center";
+        document.body.insertBefore(varrow, document.body.firstChild);
+        left.appendChild(canvas);
+        if (links)
+            left.appendChild(links);
+        varrow.appendChild(left);
+        varrow.appendChild(panel);
+        if (window.fitCanvas)
+            window.fitCanvas();
 
         el = {
             lvl: document.getElementById("xgd-lvl"),

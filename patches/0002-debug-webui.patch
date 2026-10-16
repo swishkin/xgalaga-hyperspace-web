@@ -1,6 +1,6 @@
 diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 --- xgal-p1/xgalaga-2.1.1.0/main.c	2026-10-16 11:39:56.254844858 -0500
-+++ xgal-p2/xgalaga-2.1.1.0/main.c	2026-10-16 13:03:14.488410907 -0500
++++ xgal-p2/xgalaga-2.1.1.0/main.c	2026-10-16 14:03:36.932491899 -0500
 @@ -22,6 +22,9 @@
  #include "paths.h"
  #include "proto.h"
@@ -19,7 +19,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  static int plflash = 100;   /* was 50 @ 30Hz: doubled ticks */
  static int fullscreen = 0;
  #ifndef ORIGINAL_XGALAGA
-@@ -185,6 +189,31 @@
+@@ -185,6 +189,33 @@
      }
  }
  
@@ -29,7 +29,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +int x, y;
 +const struct xgal_icon *ic;
 +{
-+    static W_Color slotcolor[5];
++    static W_Color slotcolor[7];
 +    static int inited = 0;
 +    int i;
 +
@@ -39,6 +39,8 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +	slotcolor[2] = W_Grey;
 +	slotcolor[3] = W_Yellow;
 +	slotcolor[4] = W_Red;
++	slotcolor[5] = W_Cyan;
++	slotcolor[6] = W_Green;
 +	inited = 1;
 +    }
 +    for(i = 0; i < ic->h * ic->w; i++) {
@@ -51,7 +53,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  static void do_stars()
  {
      int i;
-@@ -216,6 +245,56 @@
+@@ -216,6 +247,56 @@
              }
              W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), stars[i].color);
          }
@@ -87,17 +89,17 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +
 +		sprintf(buf, "%d", maxtorps);
 +		tw = W_StringWidth(buf, W_RegularFont);
-+		total = xgal_icon_weapon[weapon].w + 2 + tw + 2;
++		total = xgal_icon_weapon[weapon].w + 3 + tw + 3;
 +		if(nspeed > 0)
 +		    /* trailing gap not drawn */
 +		    total += nspeed * (xgal_icon_speed.w + 1) - 1;
 +		x = right - total;
 +		draw_hud_icon(baseWin, x, (20 - xgal_icon_weapon[weapon].h) / 2,
 +			      &xgal_icon_weapon[weapon]);
-+		x += xgal_icon_weapon[weapon].w + 2;
++		x += xgal_icon_weapon[weapon].w + 3;
 +		W_MaskText(baseWin, x, (20 - W_Textheight) / 2, W_White,
 +			    buf, strlen(buf), W_RegularFont);
-+		x += tw + 2;
++		x += tw + 3;
 +		for(i = 0; i < nspeed; i++)
 +		    draw_hud_icon(baseWin, x + i * (xgal_icon_speed.w + 1),
 +				  (20 - xgal_icon_speed.h) / 2, &xgal_icon_speed);
@@ -108,7 +110,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  #ifdef SHOW_SHIELD_BAR
  	    if ((plshield > 0) || (shieldsleft > 0)) { 
  		int shieldcount = 0;
-@@ -235,6 +314,8 @@
+@@ -235,6 +316,8 @@
  #endif /* SHOW_SHIELD_BAR */
  
  
@@ -117,7 +119,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
      }
      if(starspeed != 1) {
          char buf[20];
-@@ -843,6 +924,35 @@
+@@ -843,6 +926,35 @@
                       playerShip->width, h);
  }
  
@@ -153,7 +155,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  static void do_player(mx, my, but)
  int mx, my, but;
  {
-@@ -851,7 +961,6 @@
+@@ -851,7 +963,6 @@
      static int shotside = 0;
  #endif
      W_Event wev;
@@ -161,7 +163,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  
      if(gameOver) {
          while(W_EventsPending()) {
-@@ -906,29 +1015,7 @@
+@@ -906,29 +1017,7 @@
                  if(!getting_name) {
                      if(mouseControl)
                          W_GrabPointer(baseWin);
@@ -192,7 +194,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  }
                  break;
              case W_EV_EXPOSE:
-@@ -950,14 +1037,14 @@
+@@ -950,14 +1039,14 @@
          case W_EV_KEY_OFF:
              switch(wev.key) {
              case 'f'+128:
@@ -210,7 +212,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  break;
  #ifdef ACTIVATED_SHIELD
  	    case 'x':
-@@ -972,14 +1059,14 @@
+@@ -972,14 +1061,14 @@
          case W_EV_KEY:
              switch(wev.key) {
              case 'f'+128:
@@ -228,7 +230,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  break;
              case 'k':
              case 256+'k':       //363:
-@@ -1097,14 +1184,14 @@
+@@ -1097,14 +1186,14 @@
  
          if((!mouseControl && ! js_device) ||
  	   (js_device && mx == plx && but == 0)) {
@@ -246,7 +248,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  but = W_LBUTTON;
              else
                  but = 0;
-@@ -1260,7 +1347,136 @@
+@@ -1260,7 +1349,140 @@
      }
  }
  
@@ -344,7 +346,10 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +    ships = n;
 +}
 +
-+/* n = number of full shield icons to show (0..8). */
++/* n = number of shield icons to bank (0..8).  Banked shields are NOT
++ * activated: they sit in shieldsleft so the bar shows n icons without
++ * the shield bubble being up (the player activates it with the shield
++ * key, as in the original). */
 +void xgal_web_debug_set_shields(n)
 +int n;
 +{
@@ -352,8 +357,9 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +	n = 0;
 +    if(n > 8)
 +	n = 8;
-+    shieldsleft = 0;
-+    plshield = (n > 0) ? (n * SHIELDTIME - SHIELDTIME / 19) : 0;
++    plshield = 0;
++    shieldon = 0;
++    shieldsleft = (n > 0) ? (n * SHIELDTIME - SHIELDTIME / 19) : 0;
 +}
 +
 +/* n = number of speed prizes grabbed (0..4; clamped at MAXSPEED). */

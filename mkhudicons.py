@@ -1,212 +1,200 @@
 #!/usr/bin/env python3
-"""Generate hudicons.h — HUD equipment-indicator icons.
+"""mkhudicons.py — generate hudicons.h for the web build's HUD
+equipment indicators.
 
-The weapon icons are the torpedoes of each weapon's prize sprite: the
-whitish pixels only, with the colored pill background removed.  The speed
-icon is the speed-prize rocket in its original colors.
+Icons:
+  - one per weapon type: the torps of that weapon's prize sprite,
+    drawn in the pill's primary (background) color;
+  - the speed icon: the red zigzag / lightning bolt of the speed
+    prize sprite, cropped to the bolt's own bounding box (not the
+    full pill), drawn in the pill's primary yellow.
 
-Sources are the pristine tree's images/*.xpm files; pr_spread and pr_machine
-exist only as inline XPM arrays in images.c and are parsed from there.
+Wlib has no per-pixel colors, so each icon is monochrome in one of
+these palette slots (see wlib_web.c):
 
-Usage:  python3 mkhudicons.py [output.h]     (default: hudicons.h)
-The script also prints an ASCII preview of every icon on stdout.
+    NONE WHITE GREY YELLOW RED CYAN GREEN
+
+Pill primary colors used:
+    single  : yellow pill      -> YELLOW
+    double  : teal pill        -> CYAN
+    triple  : cyan pill        -> CYAN
+    spread  : blue pill        -> CYAN
+    machine : (requested)      -> RED
+    speed   : yellow pill      -> YELLOW
 """
-import os
 import re
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-TREE = os.path.join(HERE, "xgalaga-2.1.1.0")
+ROOT = "xgalaga-2.1.1.0"
 
-# Weapon indices, in defs.h enum order (SINGLESHOT..MACHINEGUN).
-WEAPONS = ["single", "doub", "trip", "spread", "machine"]
-WEAPON_COMMENTS = [
-    "SINGLESHOT",
-    "DOUBLESHOT",
-    "TRIPLESHOT",
-    "SPREADSHOT",
-    "MACHINEGUN",
-]
-
-SLOTS = {
-    "white": (0xFF, 0xFF, 0xFF),
-    "grey": (0xBC, 0xBC, 0xBC),
-    "yellow": (0xFF, 0xFF, 0x00),
-    "red": (0xFF, 0x00, 0x00),
-}
-SLOT_INDEX = {n: i for i, n in enumerate(
-    ["none", "white", "grey", "yellow", "red"])}
+SLOTS = {"NONE": 0, "WHITE": 1, "GREY": 2, "YELLOW": 3,
+         "RED": 4, "CYAN": 5, "GREEN": 6}
+PREV = {0: ".", 1: "W", 2: "g", 3: "Y", 4: "R", 5: "C", 6: "G"}
 
 
-def parse_xpm(strs):
-    w, h, n, cpp = map(int, strs[0].split())
-    if cpp != 1:
-        raise SystemExit("only 1-char-per-pixel XPMs are supported")
+def parse_xpm(lines):
+    """lines: raw string list of one XPM array body (with quotes)."""
+    for i, l in enumerate(lines):
+        m = re.match(r'^"(\d+) (\d+) (\d+) (\d+)"[,\s]*$', l.strip())
+        if m:
+            w, h = int(m.group(1)), int(m.group(2))
+            return w, h, lines[i + 1:]
+    raise ValueError("no XPM header found")
+
+
+def load_sprite(src):
+    """src: (path,) for a .xpm file or (path, varname) for an inline
+    XPM in a .c file.  Returns (w, h, colors, grid)."""
+    if len(src) == 2 and src[1]:
+        text = open(src[0]).read()
+        m = re.search(r"static char \* %s\[\] = \{" % src[1], text)
+        if not m:
+            raise ValueError("inline XPM %s not found in %s" % (src[1], src[0]))
+        end = text.index("};", m.end())
+        lines = text[m.end():end].splitlines()
+    else:
+        lines = open(src[0]).read().splitlines()
+    w, h, rest = parse_xpm(lines)
     colors = {}
-    for i in range(1, n + 1):
-        line = strs[i]
-        tab = line.find("\t")
-        if tab < 0:
-            raise SystemExit("malformed XPM color line: %r" % line)
-        ch = line[0]  # pixel char (may be a space)
-        spec = line[tab + 1:].strip()[2:].strip()  # drop leading "c"
-        if spec == "None":
-            colors[ch] = None
-        else:
-            hx = spec.lstrip("#")
-            # #AARRGGBB in images/*.xpm, #RRGGBB in the inline images.c XPMs
-            colors[ch] = ((int(hx[6:8], 16), int(hx[4:6], 16), int(hx[2:4], 16))
-                          if len(hx) == 8 else
-                          (int(hx[4:6], 16), int(hx[2:4], 16), int(hx[0:2], 16)))
-    rows = strs[1 + n:1 + n + h]
-    if len(rows) != h:
-        raise SystemExit("XPM row count mismatch")
-    return w, h, colors, rows
-
-def read_file_xpm(name):
-    with open(os.path.join(TREE, "images", name + ".xpm")) as f:
-        text = f.read()
-    m = re.search(r"\{.*\}", text, re.S)
-    return re.findall(r'"([^"]*)"', m.group(0))
+    j = 0
+    while j < len(rest):
+        l = rest[j]
+        # pixel char (may be a space) + tab + "c <spec>"
+        m = re.match(r'^"\s(.+)\s+c\s+(.+)"[,\s]*$', l)
+        if not m:
+            m = re.match(r'^"(.)\s+c\s+(.+)"[,\s]*$', l)
+        if m:
+            colors[l[1]] = m.group(2)
+            j += 1
+            continue
+        break
+    grid = rest[j:j + h]
+    return w, h, colors, grid
 
 
-def read_inline_xpm(var):
-    with open(os.path.join(TREE, "images.c")) as f:
-        text = f.read()
-    m = re.search(r"static char \* %s_xpm\[\] = \{" % var, text)
-    if not m:
-        raise SystemExit("images.c: %s_xpm not found" % var)
-    end = text.index("};", m.end())
-    return re.findall(r'"([^"]*)"', text[m.end():end])
+def hexrgb(spec):
+    spec = spec.strip().lstrip("#")
+    if spec.lower() == "none":
+        return None
+    if len(spec) == 12:  # #AARRGGBB (byte-doubled form used here)
+        spec = spec[2:]
+    spec = spec.upper()
+    return (int(spec[0:2], 16), int(spec[2:4], 16), int(spec[4:6], 16))
 
 
-def nearest(rgb, names):
-    best, bd = None, None
-    for nm in names:
-        c = SLOTS[nm]
-        d = sum((rgb[i] - c[i]) ** 2 for i in range(3))
-        if bd is None or d < bd:
-            best, bd = nm, d
-    return best
-
-
-def make_icon(strs, names):
-    """Return (w, h, [slot, ...]) cropped to the kept pixels' bounding box.
-
-    names containing 'white' enable the whitish-only filter (torpedo
-    pixels); the rest keep every non-transparent pixel.
-    """
-    w, h, colors, rows = parse_xpm(strs)
+def sprite_pixels(w, h, colors, grid):
+    """(x, y) -> (r, g, b) for every opaque pixel."""
     px = {}
-    for y, row in enumerate(rows):
-        for x, ch in enumerate(row):
-            rgb = colors[ch]
-            if rgb is None:
-                continue
-            if "white" in names:
-                lo, hi = min(rgb), max(rgb)
-                if not (lo >= 0xB0 and hi - lo <= 0x20):
-                    continue
-            px[(x, y)] = nearest(rgb, names)
-    if not px:
-        raise SystemExit("no pixels kept")
-    x0 = min(x for x, _ in px)
-    x1 = max(x for x, _ in px)
-    y0 = min(y for _, y in px)
-    y1 = max(y for _, y in px)
-    grid = [px.get((x, y)) or "none"
-            for y in range(y0, y1 + 1)
-            for x in range(x0, x1 + 1)]
-    return x1 - x0 + 1, y1 - y0 + 1, grid
-
-
-def preview(name, w, h, grid):
-    print(name)
     for y in range(h):
-        print("  " + " ".join("#" if grid[y * w + x] else "."
-                              for x in range(w)))
-    print()
+        l = grid[y].strip()
+        mm = re.match(r'^"([^"]*)"', l)
+        row = mm.group(1) if mm else l
+        for x in range(w):
+            ch = row[x] if x < len(row) else " "
+            spec = colors.get(ch)
+            if spec is None:
+                continue
+            rgb = hexrgb(spec)
+            if rgb is not None:
+                px[(x, y)] = rgb
+    return px
 
 
-def emit(path, icons, speed):
-    lines = []
-    ap = lines.append
-    ap("/* hudicons.h — generated by mkhudicons.py.  Do not edit by hand;")
-    ap(" * re-run the script to regenerate.")
-    ap(" *")
-    ap(" * HUD equipment-indicator icons, drawn in do_stars() to the left of")
-    ap(" * the shield bar:")
-    ap(" *   - one per weapon type: the torpedoes of that weapon's")
-    ap(" *   prize sprite (the whitish pixels only; the colored pill is")
-    ap(" *   discarded).  The speed icon is the speed-prize rocket in its")
-    ap(" *   original colors.")
-    ap(" */")
-    ap("#ifndef HUDICONS_H")
-    ap("#define HUDICONS_H")
-    ap("")
-    ap("enum {")
-    ap("    XGAL_ICON_NONE = 0,")
-    ap("    XGAL_ICON_WHITE,")
-    ap("    XGAL_ICON_GREY,")
-    ap("    XGAL_ICON_YELLOW,")
-    ap("    XGAL_ICON_RED")
-    ap("};")
-    ap("")
-    ap("struct xgal_icon {")
-    ap("    int w;")
-    ap("    int h;")
-    ap("    const unsigned char *idx;  /* h*w, row-major, XGAL_ICON_* */")
-    ap("};")
-    ap("")
-    for (nm, w, h, grid) in icons:
-        ap("static const unsigned char xgal_icon_%s_idx[] = {" % nm)
-        vals = [SLOT_INDEX[s] for s in grid]
-        for i in range(0, len(vals), 16):
-            ap("    " + ", ".join(str(v) for v in vals[i:i + 16]) + ",")
-        ap("};")
-        ap("")
-    ap("/* weapon index order: defs.h (SINGLESHOT, DOUBLESHOT, TRIPLESHOT,")
-    ap(" * SPREADSHOT, MACHINEGUN) */")
-    ap("static const struct xgal_icon xgal_icon_weapon[5] = {")
-    for (nm, w, h, grid) in icons:
-        ap("    { %d, %d, xgal_icon_%s_idx },  /* %s */"
-           % (w, h, nm, WEAPON_COMMENTS[icons.index((nm, w, h, grid))]))
-    ap("};")
-    ap("")
-    (nm, w, h, grid) = speed
-    ap("static const unsigned char xgal_icon_speed_idx[] = {")
-    vals = [SLOT_INDEX[s] for s in grid]
-    for i in range(0, len(vals), 16):
-        ap("    " + ", ".join(str(v) for v in vals[i:i + 16]) + ",")
-    ap("};")
-    ap("static const struct xgal_icon xgal_icon_speed = { %d, %d, xgal_icon_speed_idx };"
-       % (w, h))
-    ap("")
-    ap("#endif /* HUDICONS_H */")
-    with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n")
+def make_icon(name, src, signature, slot):
+    """Crop the pixels matching `signature` (an (r,g,b)) to their
+    bounding box; all matching pixels map to the single `slot`."""
+    w, h, colors, grid = load_sprite(src)
+    px = sprite_pixels(w, h, colors, grid)
+    pts = [(x, y) for (x, y), rgb in px.items() if rgb == signature]
+    if not pts:
+        raise ValueError("%s: no pixels matching %s" % (name, signature))
+    x0 = min(p[0] for p in pts); x1 = max(p[0] for p in pts)
+    y0 = min(p[1] for p in pts); y1 = max(p[1] for p in pts)
+    iw, ih = x1 - x0 + 1, y1 - y0 + 1
+    s = SLOTS[slot]
+    idx = [0] * (iw * ih)
+    for (x, y) in pts:
+        idx[(y - y0) * iw + (x - x0)] = s
+    print("%-8s %2dx%-2d %s" % (name, iw, ih, slot))
+    for y in range(ih):
+        print("   " + "".join(PREV[v] for v in idx[y * iw:(y + 1) * iw]))
+    return iw, ih, idx
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "hudicons.h")
-    sources = [
-        (WEAPONS[0], read_file_xpm("pr_sing")),
-        (WEAPONS[1], read_file_xpm("pr_doub")),
-        (WEAPONS[2], read_file_xpm("pr_trip")),
-        (WEAPONS[3], read_inline_xpm("pr_spread")),
-        (WEAPONS[4], read_inline_xpm("pr_machine")),
-    ]
-    icons = []
-    for nm, strs in sources:
-        w, h, grid = make_icon(strs, ["white", "grey"])
-        preview("weapon: " + nm + "  (%dx%d)" % (w, h), w, h, grid)
-        icons.append((nm, w, h, grid))
-    sw, sh, sgrid = make_icon(read_file_xpm("pr_speed"),
-                              ["white", "grey", "yellow", "red"])
-    preview("speed  (%dx%d)" % (sw, sh), sw, sh, sgrid)
-    emit(out, icons, ("speed", sw, sh, sgrid))
-    print("wrote " + out)
+    sing = make_icon("single", (ROOT + "/images/pr_sing.xpm",),
+                     (0xBC, 0xBC, 0xBC), "YELLOW")
+    doub = make_icon("doub", (ROOT + "/images/pr_doub.xpm",),
+                     (0xBC, 0xBC, 0xBC), "CYAN")
+    trip = make_icon("trip", (ROOT + "/images/pr_trip.xpm",),
+                     (0xFF, 0xFF, 0xFF), "CYAN")
+    spread = make_icon("spread", (ROOT + "/images.c", "pr_spread_xpm"),
+                       (0xFF, 0xFF, 0xFF), "CYAN")
+    mach = make_icon("machine", (ROOT + "/images.c", "pr_machine_xpm"),
+                     (0xFF, 0xFF, 0xFF), "RED")
+    speed = make_icon("speed", (ROOT + "/images/pr_speed.xpm",),
+                      (0xFF, 0x00, 0x00), "YELLOW")
+
+    def arr(v):
+        return ", ".join(str(x) for x in v)
+
+    out = []
+    out.append("/* hudicons.h — generated by mkhudicons.py.  Do not edit by hand;")
+    out.append(" * re-run the script to regenerate.")
+    out.append(" *")
+    out.append(" * HUD equipment-indicator icons, drawn in do_stars() to the left")
+    out.append(" * of the shield bar.  Each icon is monochrome in the pill's")
+    out.append(" * primary color (Wlib has no per-pixel colors): single = yellow")
+    out.append(" * pill, double = teal pill (nearest slot: cyan), triple = cyan")
+    out.append(" * pill, spread = blue pill (cyan), machine = red, speed = the")
+    out.append(" * red zigzag of the yellow speed pill (cropped to the bolt),")
+    out.append(" * drawn in yellow.")
+    out.append(" */")
+    out.append("#ifndef HUDICONS_H")
+    out.append("#define HUDICONS_H")
+    out.append("")
+    out.append("enum {")
+    out.append("    XGAL_ICON_NONE = 0,")
+    out.append("    XGAL_ICON_WHITE,")
+    out.append("    XGAL_ICON_GREY,")
+    out.append("    XGAL_ICON_YELLOW,")
+    out.append("    XGAL_ICON_RED,")
+    out.append("    XGAL_ICON_CYAN,")
+    out.append("    XGAL_ICON_GREEN")
+    out.append("};")
+    out.append("")
+    out.append("struct xgal_icon {")
+    out.append("    int w;")
+    out.append("    int h;")
+    out.append("    const unsigned char *idx;  /* h*w, row-major, XGAL_ICON_* */")
+    out.append("};")
+    for name, (w, h, idx) in [("single", sing), ("doub", doub),
+                              ("trip", trip), ("spread", spread),
+                              ("machine", mach)]:
+        out.append("")
+        out.append("static const unsigned char xgal_icon_%s_idx[] = {" % name)
+        out.append("    %s," % arr(idx))
+        out.append("};")
+    out.append("")
+    out.append("/* weapon index order: defs.h (SINGLESHOT, DOUBLESHOT, TRIPLESHOT,")
+    out.append(" * SPREADSHOT, MACHINEGUN) */")
+    out.append("static const struct xgal_icon xgal_icon_weapon[5] = {")
+    out.append("    { %d, %d, xgal_icon_single_idx },  /* SINGLESHOT */" % sing[:2])
+    out.append("    { %d, %d, xgal_icon_doub_idx },  /* DOUBLESHOT */" % doub[:2])
+    out.append("    { %d, %d, xgal_icon_trip_idx },  /* TRIPLESHOT */" % trip[:2])
+    out.append("    { %d, %d, xgal_icon_spread_idx },  /* SPREADSHOT */" % spread[:2])
+    out.append("    { %d, %d, xgal_icon_machine_idx },  /* MACHINEGUN */" % mach[:2])
+    out.append("};")
+    out.append("")
+    out.append("static const unsigned char xgal_icon_speed_idx[] = {")
+    out.append("    %s," % arr(speed[2]))
+    out.append("};")
+    out.append("static const struct xgal_icon xgal_icon_speed = { %d, %d, xgal_icon_speed_idx };" % speed[:2])
+    out.append("")
+    out.append("#endif /* HUDICONS_H */")
+    open("hudicons.h", "w").write("\n".join(out) + "\n")
+    print("wrote hudicons.h")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

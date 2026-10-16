@@ -73,19 +73,22 @@ line in `index.html` (next to `XGAL_LEADERBOARD_URL`):
 window.XGAL_DEBUG_WEBUI = true;
 ```
 
-With the panel enabled it appears below the canvas, above the links row:
+With the panel enabled it appears to the right of the canvas:
 
-- **Readouts** — level, meta-level, score, ships, max torps, torps in
-  flight, enemy torps (in flight / max), ship speed, shield icons, aliens
+- **Readouts** — level, meta-level, score, ships, min torps (the floor
+  the torp count drops back to), torps in flight, enemy torps (in flight /
+  max), ship speed, shield icons, aliens
   alive, warp star speed, state (PLAYING / PAUSED / GAME OVER), simulation
   rate (≈ 60 Hz) and render FPS.
 - **Controls** — start a new game at any level 1–9999 (the original's
   `-level` flag caps at 15; the web setter does not — level files wrap mod
-  15 and the meta-level ramps as usual), set the current weapon, max torps
-  (1–15), ships (0–10), shields (0–8 full shield icons) and speed prizes
-  (0–4), and pause / resume.  The setters take effect immediately, paused
-  or not.  Changing the weapon floors the max-torp count at that weapon's
-  current-level minimum, as the game does on weapon pickup.
+  15 and the meta-level ramps as usual), set the current weapon, min torps
+  (1–15), ships (0–10), shields (0–8 shield icons; they are *banked*, not
+  activated — the shield key still brings the shield up, as in the
+  original) and speed prizes (0–4), and pause / resume.  The setters take
+  effect immediately, paused or not.  Changing the weapon floors the torp
+  count at that weapon's current-level minimum, as the game does on weapon
+  pickup.
 
 The panel's C side (`xgal_web_debug_state()` plus the
 `xgal_web_debug_set_*` setters, in `main.c`) is `#ifndef ORIGINAL_XGALAGA`
@@ -331,12 +334,15 @@ started immediately).
 - A 1 px grey (`#808080`) border frames the game canvas so its edges are
   visible against the black page.
 - The top-right strip carries the equipment indicators, immediately left
-  of the shield bar (and shifting with it): the current weapon's torp icon
-  (the whitish pixels of that weapon's prize sprite, generated into
-  `hudicons.h` by `mkhudicons.py`), the max-torp count, and one speed icon
-  per speed prize taken.  The strip is re-cleared and redrawn every frame
-  so the group tracks the shield count (0 shields → flush with the right
-  edge).
+  of the shield bar (and shifting with it): the current weapon's torp
+  icon, the min-torp count, and one speed icon per speed prize taken, with
+  3 px between the sections.  The icons are generated into `hudicons.h`
+  by `mkhudicons.py` from the prize sprites and drawn in each pill's
+  primary color (single = yellow pill, double = teal, triple = cyan,
+  spread = blue, machine = red); the speed icon is the red zigzag of the
+  speed pill cropped to the lightning bolt, drawn in the pill's yellow.
+  The strip is re-cleared and redrawn every frame so the group tracks the
+  shield count (0 shields → flush with the right edge).
 
 ### Input
 

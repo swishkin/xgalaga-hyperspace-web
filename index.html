@@ -78,16 +78,17 @@
   function fitCanvas() {
     var c = document.getElementById("xgalcanvas");
     var bw = 2; /* 1px border on each side */
-    /* Space used by non-canvas page chrome (links row, debug panel),
-     * so the scaled game still fits the window. */
+    /* Space used by non-canvas page chrome (links row), plus the debug
+     * panel's width when it is on the side. */
     var chrome = 0;
     var links = document.getElementById("xgal-links");
     if (links && links.offsetHeight)
       chrome += links.offsetHeight + 8; /* margin-top */
+    var side = 0;
     var dbg = document.getElementById("xgal-debug");
-    if (dbg && dbg.offsetHeight)
-      chrome += dbg.offsetHeight + 6; /* margin-top */
-    var s = Math.min((window.innerWidth - bw) / c.width,
+    if (dbg && dbg.offsetWidth)
+      side = dbg.offsetWidth + 16; /* panel + its left margin */
+    var s = Math.min((window.innerWidth - bw - side) / c.width,
                      (window.innerHeight - bw - chrome) / c.height);
     var whole = Math.floor(s);
     s = whole >= 1 ? whole : s;
