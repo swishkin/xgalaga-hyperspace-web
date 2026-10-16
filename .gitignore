@@ -1,4 +1,5 @@
 scores.json
+.env
 *.o
 *.o.hyper
 libsprite.a

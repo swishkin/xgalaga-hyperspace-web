@@ -161,16 +161,18 @@ For a persistent setup (scores survive container updates; the image ships
 only the game page and the server — no source tree):
 
 ```sh
-./build.sh            # build the bundle first (needs emsdk; see Building)
-docker compose up -d  # from the repo root
+cp .env.example .env   # first time only — leaderboard.py knobs
+./build.sh             # build the bundle first (needs emsdk; see Building)
+docker compose up -d   # from the repo root
 ```
 
-Play at `http://localhost:8088/`.  Every runtime knob is an environment
-variable (see the `docker-compose.yml` comments and the `leaderboard.py`
-docstring): port, board size, CORS origin, abuse limits.  Scores persist in
-a named volume mounted at `/data`.  The server runs as `nobody`, and its
-code lives outside the served directory, so the public endpoint can only
-serve `index.html` and `xgalaga.js`.
+Play at `http://localhost:8088/`.  Every runtime knob is set in `.env`
+(see `.env.example` and the `leaderboard.py` docstring): port, board size,
+CORS origin, abuse limits.  Scores persist in the `./data` bind mount,
+which must be writable by uid 65534 (the `nobody` user the server runs
+as; `chmod 777 data` works for a single-user machine).  The server's code
+lives outside the served directory, so the public endpoint can only serve
+`index.html` and `xgalaga.js`.
 
 ## Security
 
