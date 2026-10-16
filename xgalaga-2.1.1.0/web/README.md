@@ -10,7 +10,7 @@ small web backends in this directory. The game's own C sources are compiled
 with a small set of web-specific changes:
 
 - `main.c` — keyboard is the default control mode (the original defaulted to
-  mouse capture on the title screen); home-row keybinds `J`/`L`/`F`/`D`
+  mouse capture on the title screen); home-row keybinds `j`/`l`/`f`/`d`
   mapped to the game's left/right/fire/shield keys; `Q` (and `Shift+Q`)
   kill your ship and end the game back at the title instead of exiting the
   program (there is no program to exit in a browser tab); Enter no longer
@@ -48,8 +48,8 @@ mouse). Mouse control is still available via `m`.
 |--------------------------------|--------------------------------------------|
 | `j` / ←                        | move ship left                             |
 | `l` / →                        | move ship right                            |
-| `F` / Space / LMB              | fire                                       |
-| `D`                            | activate shield (hypo variant)             |
+| `f` / Space / LMB              | fire                                       |
+| `d`                            | activate shield (hypo variant)             |
 | `P`                            | pause                                      |
 | `S`                            | toggle sound                               |
 | `k` / `m`                      | switch to keyboard / mouse control         |
