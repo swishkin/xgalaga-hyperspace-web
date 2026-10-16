@@ -42,14 +42,13 @@
 # endif /* ENABLE_SPREAD_SHOT */
 #endif /* ENABLE_MACHINE_GUN */
 
-#define PRIZESPEED 1.5  /* was 3 px @ 30Hz: halved per tick */
+#define PRIZESPEED 3
 
 W_Image *prizeImages[NUMPRIZES];
     
 struct prize {
     struct prize *next, *prev;
-    float x, y;
-    int type, dying;
+    int x, y, type, dying;
 } *first_prize; /* 8-) */
 
 void init_prizes()
@@ -71,7 +70,7 @@ void init_prizes()
 #endif 
 }
     
-void new_prize(float x, float y)
+void new_prize(int x, int y)
 {
     struct prize *p;
 
@@ -95,7 +94,7 @@ void undo_prizes()
 	nextp = p->next;
 
 	W_CacheClearArea(baseWin, 
-			 PX(p->x-prizeImages[p->type]->width/2), PX(p->y-prizeImages[p->type]->width/2),
+			 p->x-prizeImages[p->type]->width/2, p->y-prizeImages[p->type]->width/2,
 			 prizeImages[p->type]->width+1, prizeImages[p->type]->height);
 	if(p->dying) {
 	    if(p->next)
@@ -122,7 +121,7 @@ void do_prizes()
 	if(!paused)
 	    p->y+=PRIZESPEED;
 	W_DrawImage(baseWin, 
-		    PX(p->x-prizeImages[p->type]->width/2), PX(p->y-prizeImages[p->type]->width/2), 
+		    p->x-prizeImages[p->type]->width/2, p->y-prizeImages[p->type]->width/2,
 		    0, prizeImages[p->type], W_Green);
 
 	if(p->y > (WINHEIGHT-20) && (ABS(p->x - plx) < 15)
@@ -146,11 +145,8 @@ void do_prizes()
 		    maxtorps++;
 		else {
 		    weapon = DOUBLESHOT;
-		    {
-			int mn = weapon_mintorps(DOUBLESHOT, level);
-			if (maxtorps < mn)
-			    maxtorps = mn;
-		    }
+		    if(maxtorps < 4)
+			maxtorps = 4;
 		}
 		break;
 	      case PR_TRIP:
@@ -158,16 +154,13 @@ void do_prizes()
 		    maxtorps++;
 		else {
 		    weapon = TRIPLESHOT;
-		    {
-			int mn = weapon_mintorps(TRIPLESHOT, level);
-			if (maxtorps < mn)
-			    maxtorps = mn;
-		    }
+		    if(maxtorps < 6)
+			maxtorps=6;
 		}
 		break;
 	      case PR_SPEED:
 		if(movespeed < MAXSPEED)
-		    movespeed += 0.5f;   /* was ++ on int steps: same 6 levels */
+		    movespeed++;
 		break;
 #ifdef ENABLE_SPREAD_SHOT
               case PR_SPREAD:
@@ -175,12 +168,9 @@ void do_prizes()
                     maxtorps++;
                 else {
                     weapon = SPREADSHOT;
-                    {
-			int mn = weapon_mintorps(SPREADSHOT, level);
-			if (maxtorps < mn)
-			    maxtorps = mn;
-                    }
-                }
+                    if (maxtorps < 5)
+                       maxtorps = 5;
+		}
 		break;
 #endif /* ENABLE_SPREAD_SHOT */
 #ifdef ENABLE_MACHINE_GUN
@@ -189,11 +179,8 @@ void do_prizes()
                    maxtorps++;
                 else {
                    weapon = MACHINEGUN;
-                   {
-			int mn = weapon_mintorps(MACHINEGUN, level);
-			if (maxtorps < mn)
-			    maxtorps = mn;
-                   }
+                   if (maxtorps < 3)
+                      maxtorps = 3;
                 }
                 break;
 #endif /* ENABLE_MACHINE_GUN */
@@ -260,7 +247,7 @@ void do_prizes()
 		break;
 	      case PR_LEMON:
 		gotlemon = 1;
-		maxtorps = weapon_mintorps(0, level);
+		maxtorps = MINTORPS;
 		weapon = 0;
 		movespeed = MINSPEED;
 		break;

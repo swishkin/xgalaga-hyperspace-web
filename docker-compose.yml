@@ -16,7 +16,7 @@ services:
       XGAL_MAX: "100"        # board entries kept
       # Security: when the game has a fixed public origin, lock the API to
       # it so other websites cannot read/flood the board through a player's
-      # browser (see the security notes in xgalaga-2.1.1.0/web/README.md):
+      # browser (see the security notes in README.md):
       # XGAL_ORIGIN: "https://xgal.example.com"
       # Abuse limits (defaults shown):
       # XGAL_MAX_SCORE: "1000000000"

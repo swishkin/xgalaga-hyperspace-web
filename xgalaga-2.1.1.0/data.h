@@ -43,10 +43,10 @@ extern int alien_shape[];
 extern int weapon;
 extern int maxtorps, numtorps;
 
-extern float plx;
+extern int plx;
 extern int pldead;
 
-extern float movespeed;
+extern int movespeed;
 
 #ifdef SOUND
 extern char *unixSoundPath;

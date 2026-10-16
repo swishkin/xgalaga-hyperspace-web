@@ -3,7 +3,6 @@
 #include "copyright.h"
 
 #include <config.h>
-#include "defs.h"
 
 
 #include <stdlib.h>
@@ -24,7 +23,7 @@ static void undo_bubbles()
     struct score_bubble *bub=first_bub, *nextbub;
 
     while(bub) {
-	W_CacheClearArea(baseWin, PX(bub->x-(bub->shape->width/2)), PX(bub->y-(bub->shape->height/2)), bub->shape->width, bub->shape->height);
+	W_CacheClearArea(baseWin, bub->x-(bub->shape->width/2), bub->y-(bub->shape->height/2), bub->shape->width, bub->shape->height);
 	nextbub = bub->next;
 	if(bub->count <= 0) {
 	    if(bub->prev)
@@ -46,11 +45,11 @@ static void do_bubbles()
     while(bub) {
 	if(!paused) {
 	    bub->count--;
-	    bub->y -= 0.5f;   /* was 1 px @ 30Hz: halved per tick */
+	    bub->y--;
 	}
 	W_DrawImage(baseWin, 
-		    PX(bub->x-(bub->shape->width/2)), 
-		    PX(bub->y-(bub->shape->height/2)), 
+		    bub->x-(bub->shape->width/2), 
+		    bub->y-(bub->shape->height/2), 
 		    0, bub->shape, W_Red);
 	bub=bub->next;
     }
@@ -61,7 +60,7 @@ void undo_explosions()
     struct explosion *exp=first_exp, *nextexp;
 
     while(exp) {
-	W_CacheClearArea(baseWin, PX(exp->x-(exp->shape->width/2)), PX(exp->y-(exp->shape->height/2)), exp->shape->width, exp->shape->height);
+	W_CacheClearArea(baseWin, exp->x-(exp->shape->width/2), exp->y-(exp->shape->height/2), exp->shape->width, exp->shape->height);
 	nextexp = exp->next;
 	if(exp->frame >= exp->shape->frames) {
 	    if(exp->prev)
@@ -83,17 +82,17 @@ void do_explosions()
 
     while(exp) {
 	W_DrawImage(baseWin, 
-		    PX(exp->x-(exp->shape->width/2)), 
-		    PX(exp->y-(exp->shape->height/2)), 
+		    exp->x-(exp->shape->width/2), 
+		    exp->y-(exp->shape->height/2), 
 		    exp->frame, exp->shape, W_Red);
 	if(!paused) 
-	    if (!(counter & 1)) exp->frame++;  /* 30Hz animation */
+	    exp->frame++;
 	exp=exp->next;
     }
     do_bubbles();
 }
 
-void new_explosion(float x, float y, int type)
+void new_explosion(int x, int y, int type)
 {
     struct explosion *exp;
 
@@ -125,7 +124,7 @@ void new_explosion(float x, float y, int type)
 }
 
 
-void score_flagship(float x, float y, int ne)
+void score_flagship(int x, int y, int ne)
 {
     struct score_bubble *bub;
 
@@ -138,7 +137,7 @@ void score_flagship(float x, float y, int ne)
 
     bub->x = x;
     bub->y = y;
-    bub->count=50;   /* was 25 @ 30Hz: doubled ticks */
+    bub->count=25;
     bub->shape = bubbleImages[ne];
     switch(ne) {
       case 0:

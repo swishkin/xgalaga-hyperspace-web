@@ -9,8 +9,6 @@ int cmpfilenames(const void *left, const void *right);
 void loadImageByFilename(char *filename);
 void loadAllImages(void);
 /* data.c */
-/* Minimum torps per weapon at the given level (rises every 15 levels). */
-int weapon_mintorps(int weapon, int level);
 /* paths.c */
 void path_dir(int path, int pos, int *dir, int *steer);
 void enter_path_dir(int path, int pos, int *dir, int *steer);
@@ -25,8 +23,8 @@ void init_titles(void);
 /* explosions.c */
 void undo_explosions(void);
 void do_explosions(void);
-void new_explosion(float x, float y, int type);
-void score_flagship(float x, float y, int ne);
+void new_explosion(int x, int y, int type);
+void score_flagship(int x, int y, int ne);
 void init_explosions(void);
 /* score.c */
 void undo_score(void);
@@ -43,13 +41,9 @@ int check_score(int score);
 void show_scores(void);
 void load_scores(void);
 void print_scores(void);
-#ifdef __EMSCRIPTEN__
-void xgal_web_submit(const char *name, long score, long level);
-void xgal_web_refresh(void);
-#endif
 /* prize.c */
 void init_prizes(void);
-void new_prize(float x, float y);
+void new_prize(int x, int y);
 void undo_prizes(void);
 void do_prizes(void);
 /* sound.c */
@@ -60,7 +54,7 @@ void sound_completed(int k);
 void kill_sound(void);
 /* pathfile.c */
 int get_path(int);
-void get_xy(int, float*, float*);
+void get_xy(int, int*, int*);
 int get_delay(int);
 int get_dir(int, int);
 int get_duration(int, int);

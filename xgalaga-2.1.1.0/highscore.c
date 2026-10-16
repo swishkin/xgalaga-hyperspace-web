@@ -31,21 +31,12 @@
 #include "proto.h"
 #include "data.h"
 
-/* Native X11 build: the local score file is insecure/useless, so the
- * "global" board is disabled (per-user scores only).  Web build: the
- * "global" board is the shared online leaderboard (webglue.js fetches and
- * submits it against the leaderboard API server), so enable it there.
- *
- * NO_GLOBAL_SCORES follows the upstream convention of a defined/undefined
- * flag -- the rest of this file gates the global-board code with
- * #ifndef NO_GLOBAL_SCORES -- so the web build must leave it UNDEFINED to
- * enable the board; defining it to 0 would not (an #ifdef test only looks
- * at definedness). */
-#ifdef __EMSCRIPTEN__
-#define NUM_GLOBAL_SCORES 20
-#else
+/* Global score file is insecure and rather useless today. */
 #define NO_GLOBAL_SCORES 1
+#ifdef NO_GLOBAL_SCORES
 #define NUM_GLOBAL_SCORES 0
+#else
+#define NUM_GLOBAL_SCORES 20
 #endif
 #define NUM_MY_SCORES 10
 
@@ -171,7 +162,7 @@ static void save_scores()
     close(hsf);
 #endif /* NO_GLOBAL_SCORES */
     if((home = getenv("HOME"))) {
-#if !defined(NO_GLOBAL_SCORES) && !defined(__EMSCRIPTEN__)
+#ifndef NO_GLOBAL_SCORES
 	gid_t my_egid = getegid();
 	if (setgid(getgid()) != 0) {
 		perror("setgid");
@@ -180,7 +171,7 @@ static void save_scores()
 #endif
 	snprintf(my_file_name, sizeof(my_file_name)-1, "%s/.xgalscores", home);
 	hsf = open(my_file_name, O_WRONLY | O_TRUNC | O_CREAT, 0644);
-#if !defined(NO_GLOBAL_SCORES) && !defined(__EMSCRIPTEN__)
+#ifndef NO_GLOBAL_SCORES
 	if (setgid(my_egid) != 0) {
 		perror("setgid back");
 		exit(1);
@@ -292,9 +283,6 @@ void add_score(char *name, int score)
 	}
     }
     save_scores();
-#ifdef __EMSCRIPTEN__
-    xgal_web_submit(name, score, level);
-#endif
 }
 
 int score_key(W_Event *ev)
@@ -307,7 +295,7 @@ int score_key(W_Event *ev)
 	    getting_name = 0;
 	    add_score(new_name, score);
 	    title_page = 1;
-	    pagetimer = 600;   /* was 300 @ 30Hz: doubled ticks */
+	    pagetimer = 300;
 	    W_ClearWindow(baseWin);
 	    break;
 	  case 8:
@@ -366,8 +354,7 @@ int check_score(int score)
 
 void show_scores()
 {
-    int i, n, place;
-    struct high_score *board;
+    int i;
     char buf[60];
     W_Color color;
 
@@ -375,30 +362,30 @@ void show_scores()
 
     color = W_DarkGrey;
 
+    
 #ifndef NO_GLOBAL_SCORES
-    /* Web build: the board is the shared online leaderboard; the current
-     * user's score is highlighted directly on it (thisplace, set by
-     * add_score()). */
-    board = global_scores;
-    n = NUM_GLOBAL_SCORES;
-    place = thisplace;
-#else
-    /* Native build: there is no shared board, so the per-user board is
-     * the board (highlighted via my_thisplace). */
-    board = my_scores;
-    n = NUM_MY_SCORES;
-    place = my_thisplace;
-#endif
-
-    center_text("High scores", 90, W_Yellow);
+    center_text("Global high scores", 90, W_Yellow);
     sprintf(buf, "Rank  Name                      Score   Level");
     center_text(buf, 100, W_Yellow);
     W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 111,
 	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 111, W_Red);
-    for(i=0;i<n;i++) {
-	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1,
-		board[i].name, board[i].score, board[i].level);
-	center_text(buf, 112+i*W_Textheight, (i==place ? color : W_Grey));
+    for(i=0;i<NUM_GLOBAL_SCORES;i++) {
+	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1, 
+		global_scores[i].name, global_scores[i].score,global_scores[i].level);
+	center_text(buf, 112+i*W_Textheight, (i==thisplace ? color : W_Grey));
+    }
+#endif
+    
+    center_text("Your high scores", 112+NUM_GLOBAL_SCORES*W_Textheight, W_Yellow);
+    sprintf(buf, "Rank  Name                      Score   Level");
+    center_text(buf, 112+(NUM_GLOBAL_SCORES+1)*W_Textheight, W_Yellow);
+    W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 123+(NUM_GLOBAL_SCORES+1)*W_Textheight,
+	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 123+(NUM_GLOBAL_SCORES+1)*W_Textheight, W_Red);
+    for(i=0;i<NUM_MY_SCORES;i++) {
+	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1, 
+		my_scores[i].name, my_scores[i].score,my_scores[i].level);
+	center_text(buf, 124+(NUM_GLOBAL_SCORES+1)*W_Textheight + i*W_Textheight, 
+		    (i==my_thisplace ? color : W_Grey));
     }
 }
 

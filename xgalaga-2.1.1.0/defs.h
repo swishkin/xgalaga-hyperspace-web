@@ -15,16 +15,16 @@
 # define NO_PRIZE_WHILE_DEAD
 #endif
 
-#define MAXTORPS 15
+#define MAXTORPS 10
 #define MINTORPS 3
-#define TORPSPEED 6      /* was 12 @ 30Hz: halved for 60Hz, same px/s */
+#define TORPSPEED 12
 
-#define ETORPSPEED 4     /* was 8 @ 30Hz: halved for 60Hz, same px/s */
+#define ETORPSPEED 8
 
-#define MINSPEED 1.5     /* was 3 @ 30Hz: halved for 60Hz */
-#define MAXSPEED 4.0     /* was 8 @ 30Hz: halved for 60Hz */
+#define MINSPEED 3
+#define MAXSPEED 8
 
-#define TORPDELAY 10     /* was 5 frames @ 30Hz: doubled ticks, same seconds */
+#define TORPDELAY 5
 
 #define WINWIDTH  winwidth  /* was 400 */
 #define WINHEIGHT winheight /* was 500 */
@@ -33,16 +33,13 @@
 
 #define MAXALIENS 60
 
-#define TURNSPEED 20     /* was 10 frames @ 30Hz: doubled ticks */
+#define TURNSPEED 10
 
 #define UTIMER 33333
 
 #define BONUSSHIPSCORE 50000
 
 #define ABS(a)			/* abs(a) */ (((a) < 0) ? -(a) : (a))
-
-/* Round a float pixel coordinate for the int Wlib drawing API. */
-#define PX(x) ((int)((x) + (((x) < 0.0f) ? -0.5f : 0.5f)))
 
 #define LEFTKEY 1
 #define RIGHTKEY 2
@@ -76,11 +73,11 @@
 #define TORPCHANCE 60
 
 #ifdef ORIGINAL_XGALAGA
-  #define SHIELDTIME 600
+# define SHIELDTIME 300
 #else
 # define STARTSHIELDS 0
-# define MAXSHIELDS 1600  /* was 800 frames @ 30Hz: doubled ticks */
-# define SHIELDTIME 400   /* was 200 frames @ 30Hz: doubled ticks */
+# define MAXSHIELDS 800
+# define SHIELDTIME 200
 #endif
 
 

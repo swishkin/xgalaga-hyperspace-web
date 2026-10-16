@@ -1166,7 +1166,7 @@ struct enter_path ep[NUMLEVELS][MAXALIENS] = {
 void path_dir(int path, int pos, int *dir, int *steer)
 {
     *dir =   paths[path][pos][0];
-    *steer = paths[path][pos][1] * 2;  /* 30Hz frames -> 60Hz ticks */
+    *steer = paths[path][pos][1];
 }
 
 void enter_path_dir(int path, int pos, int *dir, int *steer)
@@ -1196,7 +1196,7 @@ void start_path(int path, struct alien *al)
 
     al->path = path;
     al->path_pos = i;
-    al->steer = paths[path][i][1] * 2;
+    al->steer = paths[path][i][1];
 }
 
 void new_alien(int level, int anum, struct alien *al)

@@ -62,7 +62,7 @@ void do_score()
 
     if (drawExtra) 
     {
-	extrax += 5;   /* was 10 px @ 30Hz: halved per tick */
+	extrax += 10;
 	W_DrawImage(baseWin, extrax-(extraImage->width/2), extray-(extraImage->height/2), 0, extraImage, W_White);
 	if((extrax-(int)extraImage->width/2) > WINWIDTH)
 	    drawExtra = 0;

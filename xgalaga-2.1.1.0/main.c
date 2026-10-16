@@ -27,13 +27,12 @@ struct torp torps[MAXTORPS];
 struct star stars[NUMSTARS];
 struct torp *first_etorp=0;
 
-static float convoyx = 0;
-static int convoymove = 1;
+static int convoyx = 0, convoymove = 1;
 static int livecount = 0;
 static int starspeed = 1;
 static int attacking = 0, maxattacking, entering=0;
 static int maxetorps = 5, numetorps=0;
-static int plflash = 100;   /* was 50 @ 30Hz: doubled ticks */
+static int plflash = 50;
 static int fullscreen = 0;
 #ifndef ORIGINAL_XGALAGA
 static int shots = 0;
@@ -43,43 +42,24 @@ static int hits = 0;
 #define convoy_x_pos(i) (convoyx+(20 * (i - 10 * (i/10))))
 #define convoy_y_pos(i) (20 + (20*(i/10)))
 
-/* Per-tick moves in px, halved for 60Hz (was x2 @ 30Hz); same px/s. */
-static float moves[16][2] = {
-    {0,-2},
-    {1,-2},
-    {1.5f,-1.5f},
-    {2,-0.5f},
-    {2,0},
-    {2,0.5f},
-    {1.5f,1.5f},
-    {1,2},
-    {0,2},
-    {-1,2},
-    {-1.5f,1.5f},
-    {-2,0.5f},
-    {-2,0},
-    {-2,-0.5f},
-    {-1.5f,-1.5f},
-    {-1,-2}
+static int moves[16][2] = {
+    {0,-4},
+    {1,-4},
+    {3,-3},
+    {4,-1},
+    {4,0},
+    {4,1},
+    {3,3},
+    {1,4},
+    {0,4},
+    {-1,4},
+    {-3,3},
+    {-4,1},
+    {-4,0},
+    {-4,-1},
+    {-3,-3},
+    {-1,-4}
 };
-
-/* Per-tick move that reproduces the original 30Hz integer arithmetic
- * exactly: the original moved m + metaLevel*m/2 px per 30Hz frame
- * (integer division: on the 3px diagonal that is 3+1=4 at metaLevel 1),
- * so the same trajectory at 60Hz is (that) / 2 px per tick.  The earlier
- * float halving (moves[] + metaLevel*moves[]/2) made the
- * odd-component directions ~25% too fast, which widened the level 8
- * slither (sse/ssw segments) compared with the original. */
-static float enter_speed(int dir, int axis)
-{
-    static const int m30[16][2] = {
-        {0,-4},{1,-4},{3,-3},{4,-1},{4,0},{4,1},{3,3},{1,4},
-        {0,4},{-1,4},{-3,3},{-4,1},{-4,0},{-4,-1},{-3,-3},{-1,-4}
-    };
-    int m = m30[dir][axis];
-
-    return (m + (metaLevel * m) / 2) / 2.0f;
-}
 
 void
 xgal_exit(int v)
@@ -146,7 +126,7 @@ static void init_stars()
     for(i=0;i<NUMSTARS;i++) {
         stars[i].x = random()%WINWIDTH;
         stars[i].y = random()%WINHEIGHT;
-        stars[i].speed = ((random()%3)+1) * 0.5f; /* halved for 60Hz */
+        stars[i].speed = (random()%3)+1;
         switch(random()%5) {
         case 0:
             stars[i].color = W_White;
@@ -175,7 +155,7 @@ static void undo_stars()
     
     if(wantStars) {
         for(i=0;i<NUMSTARS;i++) {
-            W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), W_Black);
+            W_DrawPoint(baseWin, stars[i].x, stars[i].y, W_Black);
         }
     }
     if(drewlevel) {
@@ -194,7 +174,7 @@ static void do_stars()
             if(!paused)
                 stars[i].y+=stars[i].speed*((starspeed < 20) ? ABS(starspeed) : 20);
             if(stars[i].y >= WINHEIGHT) {
-                stars[i].y-=WINHEIGHT+0.5f*starspeed;
+                stars[i].y-=WINHEIGHT+starspeed;
                 stars[i].x = random() % WINWIDTH;
                 switch(random()%5) {
                 case 0:
@@ -214,7 +194,7 @@ static void do_stars()
                     break;
                 }
             }
-            W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), stars[i].color);
+            W_DrawPoint(baseWin, stars[i].x, stars[i].y, stars[i].color);
         }
 #ifdef SHOW_SHIELD_BAR
 	    if ((plshield > 0) || (shieldsleft > 0)) { 
@@ -317,8 +297,8 @@ static void undo_aliens()
     for(i=0;i<MAXALIENS;i++) {
         if(aliens[i].alive)
             W_ClearArea(baseWin, 
-                        PX(aliens[i].x-(aliens[i].shape->width/2)), 
-                        PX(aliens[i].y-(aliens[i].shape->height/2)),
+                        aliens[i].x-(aliens[i].shape->width/2), 
+                        aliens[i].y-(aliens[i].shape->height/2),
                         aliens[i].shape->width, aliens[i].shape->height);
         if(aliens[i].dying) {
             aliens[i].alive = 0;
@@ -337,11 +317,11 @@ do_escort(int i)
     } else if(aliens[fs].dir >= 0) {
         aliens[i].dir = aliens[fs].dir;
     } else {
-        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + 0.5f * convoymove;
+        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + convoymove;
         aliens[i].y = -10;
         aliens[i].dir = -2;
         aliens[i].path = -1;
-        aliens[i].steer = 4;   /* was 2 @ 30Hz: doubled ticks */
+        aliens[i].steer = 2;
         aliens[i].escorting = -1;
     }
 }
@@ -349,11 +329,11 @@ do_escort(int i)
 static void
 do_convoy(int i)
 {
-    aliens[i].x += 0.5f * convoymove;
+    aliens[i].x += convoymove;
     if((entering == 0) &&
        (attacking < maxattacking) && 
        ((livecount < maxattacking) || 
-        ((random()%20000) < (level + 2 *(48-(livecount)))))) {
+        ((random()%10000) < (level + 2 *(48-(livecount)))))) {
         switch(random()%2) {
         case 0:
             path_dir(P_PEELLEFT, 0, &aliens[i].dir, &aliens[i].steer);
@@ -377,7 +357,7 @@ do_convoy(int i)
     }
 }
 
-static void new_etorp(float x, float y, float xs, float ys)
+static void new_etorp(int x, int y, int xs, int ys)
 {
     struct torp *t;
 
@@ -408,8 +388,8 @@ static void do_enter(int i)
     }
 
     if(aliens[i].path >= 0) {
-        aliens[i].x += enter_speed(aliens[i].dir, 0);
-        aliens[i].y += enter_speed(aliens[i].dir, 1);
+        aliens[i].x += moves[aliens[i].dir][0] + metaLevel * moves[aliens[i].dir][0]/2;
+        aliens[i].y += moves[aliens[i].dir][1] + metaLevel * moves[aliens[i].dir][1]/2;
     
         aliens[i].steer--;
         if(aliens[i].steer <= 0) {
@@ -425,19 +405,19 @@ static void do_enter(int i)
         }
         tc = TORPCHANCE - level/2 - weapon*5;
         if(tc < 35) tc = 35;
-        if(numetorps < maxetorps && (!(random() % (tc*2)))) {
-            float xs, ys;
+        if(numetorps < maxetorps && (!(random()%tc))) {
+            int xs, ys;
         
             /* could aim better, not sure it should! */
         
             if(aliens[i].x > plx + 200) {
-                xs = -1.5f;
+                xs = -3;
             } else if(aliens[i].x > plx + 100) {
-                xs = -1.0f;
+                xs = -2;
             } else if(aliens[i].x < plx - 200) {
-                xs = 1.5f;
+                xs = 3;
             } else if(aliens[i].x < plx - 100) {
-                xs = 1.0f;
+                xs = 2;
             } else {
                 xs = 0;
             }
@@ -483,8 +463,8 @@ static void do_enter(int i)
 		}
 	    }
         }
-        aliens[i].x += enter_speed(aliens[i].dir, 0);
-        aliens[i].y += enter_speed(aliens[i].dir, 1);
+        aliens[i].x += moves[aliens[i].dir][0] + metaLevel * moves[aliens[i].dir][0]/2;
+        aliens[i].y += moves[aliens[i].dir][1] + metaLevel * moves[aliens[i].dir][1]/2;
     }
 }
 
@@ -494,7 +474,7 @@ static void do_aliens()
     int tc;
 
     if(!paused) {
-        convoyx += 0.5f * convoymove;
+        convoyx += convoymove;
         if(convoyx <= 0) {
             convoyx=0;
             convoymove = -convoymove;
@@ -527,8 +507,8 @@ static void do_aliens()
                 } else if(aliens[i].dir == -1) {
                     do_convoy(i);
                 } else if(aliens[i].dir == -2) {
-                    aliens[i].x += 0.5f * convoymove;
-                    aliens[i].y+=1;   /* was 2 @ 30Hz: halved per tick */
+                    aliens[i].x += convoymove;
+                    aliens[i].y+=2;
                     if(aliens[i].y >= 20 + (20*(i/10))) {
                         aliens[i].y = 20 + (20*(i/10));
                         aliens[i].dir = -1;
@@ -542,11 +522,11 @@ static void do_aliens()
                         aliens[i].x = WINWIDTH+20;
             
                     if(aliens[i].y > WINHEIGHT) {
-                        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + 0.5f * convoymove;
+                        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + convoymove;
                         aliens[i].y = -30;
                         aliens[i].dir = -2;
                         aliens[i].path = -1;
-                        aliens[i].steer = 4;   /* was 2 @ 30Hz: doubled ticks */
+                        aliens[i].steer = 2;
                         aliens[i].escorting = -1;
                         attacking--;
                         if(i < 10) {
@@ -618,19 +598,19 @@ static void do_aliens()
                     tc = TORPCHANCE - level/2 - weapon*5;
                     if(tc < 35) tc = 35;
 
-                    if(numetorps < maxetorps && (!(random() % (tc*2)))) {
-                        float xs, ys;
+                    if(numetorps < maxetorps && (!(random()%tc))) {
+                        int xs, ys;
             
                         /* could aim better, not sure it should! */
 
                         if(aliens[i].x > plx + 200) {
-                            xs = -1.5f;
+                            xs = -3;
                         } else if(aliens[i].x > plx + 100) {
-                            xs = -1.0f;
+                            xs = -2;
                         } else if(aliens[i].x < plx - 200) {
-                            xs = 1.5f;
+                            xs = 3;
                         } else if(aliens[i].x < plx - 100) {
-                            xs = 1.0f;
+                            xs = 2;
                         } else {
                             xs = 0;
                         }
@@ -639,18 +619,18 @@ static void do_aliens()
                     }
                 }
                 W_DrawImage(baseWin, 
-                            PX(aliens[i].x-(aliens[i].shape->width/2)), 
-                            PX(aliens[i].y-(aliens[i].shape->height/2)),
+                            aliens[i].x-(aliens[i].shape->width/2), 
+                            aliens[i].y-(aliens[i].shape->height/2),
                             aliens[i].dir < 0 ? 0 : aliens[i].dir, aliens[i].shape, W_Green);
             } else {  /* paused */
                 W_DrawImage(baseWin, 
-                            PX(aliens[i].x-(aliens[i].shape->width/2)), 
-                            PX(aliens[i].y-(aliens[i].shape->height/2)),
+                            aliens[i].x-(aliens[i].shape->width/2), 
+                            aliens[i].y-(aliens[i].shape->height/2),
                             aliens[i].dir < 0 ? 0 : aliens[i].dir, aliens[i].shape, W_Green);
             }
         }
     }
-    if(livecount == 0 && !paused && !(counter & 1)) {  /* warp state machine at 30Hz: the increment and the starspeed==1 level-start check must run on the same tick, as in the original 30Hz loop */
+    if(livecount == 0 && !paused) {
         starspeed++;
 #ifdef SOUND
         if(starspeed == 2)
@@ -676,7 +656,7 @@ static void init_player()
         torps[i].alive=0;
 }
 
-static void new_torp(float x, float y, float xs, float ys)
+static void new_torp(int x, int y, int xs, int ys)
 {
     int i;
 
@@ -703,8 +683,8 @@ static void undo_torps()
     for(i=0;i<MAXTORPS;i++) {
         if(torps[i].alive) {
             W_CacheClearArea(baseWin, 
-                             PX(torps[i].x-(playerTorp->width/2)), 
-                             PX(torps[i].y-(playerTorp->height/2)), 
+                             torps[i].x-(playerTorp->width/2), 
+                             torps[i].y-(playerTorp->height/2), 
                              playerTorp->width, playerTorp->height+1);
         }
     }
@@ -719,7 +699,7 @@ static void do_torps()
             if(!paused) {
                 torps[i].y += torps[i].yspeed;
                 torps[i].x += torps[i].xspeed;
-                if (!(counter & 1)) torps[i].frame++;  /* 30Hz animation */
+                torps[i].frame++;
                 for(j=0;j<MAXALIENS;j++) {
                     if(aliens[j].alive && !aliens[j].dying &&
                        (ABS(torps[i].x - aliens[j].x) < 8) &&
@@ -763,14 +743,14 @@ static void do_torps()
                     numtorps--;
                 } else
                     W_DrawImage(baseWin, 
-                                PX(torps[i].x-(playerTorp->width/2)), 
-                                PX(torps[i].y-(playerTorp->height/2)), 
+                                torps[i].x-(playerTorp->width/2), 
+                                torps[i].y-(playerTorp->height/2), 
                                 torps[i].frame, playerTorp, W_Red);
             skip: ;
             } else {/* paused */
                 W_DrawImage(baseWin, 
-                            PX(torps[i].x-(playerTorp->width/2)), 
-                            PX(torps[i].y-(playerTorp->height/2)), 
+                            torps[i].x-(playerTorp->width/2), 
+                            torps[i].y-(playerTorp->height/2), 
                             torps[i].frame, playerTorp, W_Red);
             }
         }
@@ -787,7 +767,7 @@ static void do_etorps()
             if(!paused) {
                 t->y+=t->yspeed;
                 t->x+=t->xspeed;
-                if (!(counter & 1)) t->frame++;  /* 30Hz animation */
+                t->frame++;
                 if(t->y > WINHEIGHT || t->x < 0 || t->x > WINWIDTH) {
                     if(t->next)
                         t->next->prev = t->prev;
@@ -804,14 +784,14 @@ static void do_etorps()
                     new_explosion(plx, WINHEIGHT - playerShip->height/2, 2);
                 } else {
                     W_DrawImage(baseWin, 
-                                PX(t->x-(enemyTorp->width/2)), 
-                                PX(t->y-(enemyTorp->height/2)), 
+                                t->x-(enemyTorp->width/2), 
+                                t->y-(enemyTorp->height/2), 
                                 t->frame, enemyTorp, W_Red);
                 }
             } else {
                 W_DrawImage(baseWin, 
-                            PX(t->x-(enemyTorp->width/2)), 
-                            PX(t->y-(enemyTorp->height/2)), 
+                            t->x-(enemyTorp->width/2), 
+                            t->y-(enemyTorp->height/2), 
                             t->frame, enemyTorp, W_Red);
             }
         }
@@ -825,8 +805,8 @@ static void undo_etorps()
 
     while(t) {
         W_CacheClearArea(baseWin, 
-                         PX(t->x-(enemyTorp->width/2)), 
-                         PX(t->y-(enemyTorp->width/2)), 
+                         t->x-(enemyTorp->width/2), 
+                         t->y-(enemyTorp->width/2), 
                          enemyTorp->width, enemyTorp->height);
         t=t->next;
     }
@@ -839,7 +819,7 @@ static void undo_player()
         y -= 3;
         h += 3;
     }
-    W_CacheClearArea(baseWin, PX(plx-(playerShip->width/2)), y,
+    W_CacheClearArea(baseWin, plx-(playerShip->width/2), y,
                      playerShip->width, h);
 }
 
@@ -857,13 +837,20 @@ int mx, my, but;
         while(W_EventsPending()) {
             W_NextEvent(&wev);
         
-
+	    if(gameOver)
+	      mouseControl = 1;
 
             switch(wev.type) {
             case W_EV_KEY:
                 if(score_key(&wev))
                     continue;
                 switch(wev.key) {
+                case 'q':
+                case 'Q':
+                case 256+'Q':   //369:
+                case 256+'q':   //337:
+                    xgal_exit(0);
+                    break;
                 case 'm':
                 case 256+'m':    //365:
                     mouseControl = 2;
@@ -873,12 +860,6 @@ int mx, my, but;
                      mouseControl = 0;
                      W_UngrabPointer();
                      break;
-                case 'q':
-                case 256+'q':
-                case 'Q':
-                case 256+'Q':
-                    xgal_exit(0);
-                    break;
                 case '\r'+256:
                     W_ToggleFullscreen(shellWin);
                     fullscreen = !fullscreen;
@@ -907,11 +888,7 @@ int mx, my, but;
                     if(mouseControl)
                         W_GrabPointer(baseWin);
                     gameOver = 0;
-                    keys = 0;   /* no stale key state: a movement key
-                                 * released while the game-over screen was
-                                 * up is swallowed there (no W_EV_KEY_OFF
-                                 * handling), and 'keys' persists */
-                    maxtorps = weapon_mintorps(SINGLESHOT, startLevel);
+                    maxtorps = MINTORPS;
                     weapon = 0;
                     movespeed = MINSPEED;
                     ships=2;
@@ -1011,6 +988,7 @@ int mx, my, but;
             case 256+'Q':       //337:
                 xgal_exit(0);
                 break;
+            case 'b':
             case 256+'b':       //354:
                 W_Buffer(baseWin, !W_IsBuffered(baseWin));
                 W_ClearWindow(baseWin);
@@ -1070,7 +1048,7 @@ int mx, my, but;
             case 256+'t':       //372:
                 maxtorps++;
                 if(maxtorps > MAXTORPS)
-                    maxtorps = weapon_mintorps(weapon, level);
+                    maxtorps = MINTORPS;
                 break;
 #endif /* IM_A_BIG_FAT_CHEATER */
             case '\r'+256:
@@ -1112,14 +1090,14 @@ int mx, my, but;
         
         if(pldead) {
             pldead++;
-            if(pldead >= 200) {   /* was 100 @ 30Hz: doubled ticks */
+            if(pldead >= 100) {
                 if(ships<=0) {
                     gameOver = 1;
                     W_UngrabPointer();
                     if(check_score(score)) {
 #ifdef USE_REAL_NAMES
                         add_score(getUsersFullName(), score);
-                        title_page = 1; pagetimer = 600;
+                        title_page = 1; pagetimer = 300;
 #else
                         getting_name = 1;
 #endif
@@ -1128,11 +1106,42 @@ int mx, my, but;
 #ifdef DISABLE_RESET_ON_DEATH
                     ships--;
                     maxtorps--;
+                    if (maxtorps < MINTORPS)
+                    	maxtorps = MINTORPS;
+                    switch (weapon)
                     {
-                        int mn = weapon_mintorps(weapon, level);
-                        if (maxtorps < mn)
-                            maxtorps = mn;
-                    }
+                    	case SINGLESHOT:
+                    		if (maxtorps < 3)
+                    		{
+                    			maxtorps = 3;
+                    			weapon = SINGLESHOT;
+                    		}
+                    		break;
+                    	case DOUBLESHOT:
+	                    	if (maxtorps < 4)
+                    		{
+                    			maxtorps = 4;
+                    		}
+        					break;
+                   		case SPREADSHOT:
+                    		if (maxtorps < 5)
+                    		{
+                    			maxtorps = 5;
+                    		}
+                    		break;
+						case TRIPLESHOT:
+							if (maxtorps < 6)
+                    		{
+                    			maxtorps = 6;
+                    		}
+                    		break;
+                    	case MACHINEGUN:
+                    		if (maxtorps < 3)
+                    		{
+                    			maxtorps = 3;
+                    		}
+                    		break;
+		}
 #else
                     ships--;
                     maxtorps = MINTORPS;
@@ -1140,7 +1149,7 @@ int mx, my, but;
                     movespeed = MINSPEED;
 #endif /* DISABLE_RESET_ON_DEATH */
                     pldead = 0;
-                    plflash = 100;  /* was 50 @ 30Hz: doubled ticks */
+                    plflash = 50;
                     plx = WINWIDTH/2;
                 }
             }
@@ -1163,9 +1172,9 @@ int mx, my, but;
                 break;
             case TRIPLESHOT:
                 if(numtorps < maxtorps-2) {
-                    new_torp(plx-5, WINHEIGHT - playerShip->height, -1, 0.5f-TORPSPEED);
+                    new_torp(plx-5, WINHEIGHT - playerShip->height, -2, 1-TORPSPEED);
                     new_torp(plx,   WINHEIGHT - playerShip->height, 0,   -TORPSPEED);
-                    new_torp(plx+5, WINHEIGHT - playerShip->height, 1, 0.5f-TORPSPEED);
+                    new_torp(plx+5, WINHEIGHT - playerShip->height, 2, 1-TORPSPEED);
 		    torpok = TORPDELAY;
                 }
                 break;
@@ -1182,28 +1191,28 @@ int mx, my, but;
 			}
 			if (maxtorps > 2)
 			{
-				new_torp(plx, WINHEIGHT - playerShip->height - 15, -1, -TORPSPEED*1.15);
-				new_torp(plx, WINHEIGHT - playerShip->height - 15, 1, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 15, -2, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 15, 2, -TORPSPEED*1.15);
 			}
 			if (maxtorps > 4)
 			{
-				new_torp(plx, WINHEIGHT - playerShip->height - 25, -2, -TORPSPEED*1.15);
-				new_torp(plx, WINHEIGHT - playerShip->height - 25, 2, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 25, -4, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 25, 4, -TORPSPEED*1.15);
 			}
 			if (maxtorps > 6)
 			{
-				new_torp(plx, WINHEIGHT - playerShip->height - 35, -3, -TORPSPEED*1.15);
-				new_torp(plx, WINHEIGHT - playerShip->height - 35, 3, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 35, -6, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 35, 6, -TORPSPEED*1.15);
 			}
 			if (maxtorps > 8)
 			{
-				new_torp(plx, WINHEIGHT - playerShip->height - 50, -4, -TORPSPEED*1.15);    
-				new_torp(plx, WINHEIGHT - playerShip->height - 50, 4, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 50, -8, -TORPSPEED*1.15);    
+				new_torp(plx, WINHEIGHT - playerShip->height - 50, 8, -TORPSPEED*1.15);
 			}
 			if (maxtorps > 10)
 			{
-				new_torp(plx, WINHEIGHT - playerShip->height - 60, -5, -TORPSPEED*1.15);
-				new_torp(plx, WINHEIGHT - playerShip->height - 60, 5, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 60, -10, -TORPSPEED*1.15);
+				new_torp(plx, WINHEIGHT - playerShip->height - 60, 10, -TORPSPEED*1.15);
                         }
                         torpok = TORPDELAY;
                  }
@@ -1215,7 +1224,7 @@ int mx, my, but;
                  {
 			shotside = (shotside == -15) ? 15 : -15;
 			new_torp(plx + shotside, WINHEIGHT - playerShip->height, 0, -TORPSPEED * 1.3);
-			torpok = TORPDELAY - 4;  /* was TORPDELAY-2 @ 30Hz: same 0.1s */
+			torpok = TORPDELAY - 2;
 		}
 		break;
 #endif /* ENABLE_MACHINE_GUN */
@@ -1247,16 +1256,16 @@ int mx, my, but;
     
         if(plflash > 0)
             plflash--;
-        if(!(plflash % 4))   /* was %2 @ 30Hz: same 60Hz blink */
-            W_DrawImage(baseWin, PX(plx-(playerShip->width/2)), WINHEIGHT - playerShip->height, counter/2, playerShip, W_Red);
+        if(!(plflash % 2))
+            W_DrawImage(baseWin, plx-(playerShip->width/2), WINHEIGHT - playerShip->height, counter, playerShip, W_Red);
         if(plshield > 0)
             plshield--;
-        if(plshield && ((plshield > SHIELDTIME/4) || plshield % 4)) {
-            W_DrawImage(baseWin, PX(plx-(shieldImage->width/2)), WINHEIGHT - shieldImage->height - 3, 0, shieldImage,
+        if(plshield && ((plshield > SHIELDTIME/4) || plshield % 2)) {
+            W_DrawImage(baseWin, plx-(shieldImage->width/2), WINHEIGHT - shieldImage->height - 3, 0, shieldImage,
                         W_Cyan);
         }
     } else if (!pldead) { /* paused */
-        W_DrawImage(baseWin, PX(plx-(playerShip->width/2)), WINHEIGHT - playerShip->height, counter/2, playerShip, W_Red);
+        W_DrawImage(baseWin, plx-(playerShip->width/2), WINHEIGHT - playerShip->height, counter, playerShip, W_Red);
     }
 }
 

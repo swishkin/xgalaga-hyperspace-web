@@ -1,0 +1,1336 @@
+diff -r xgal-pristine/xgalaga-2.1.1.0/data.c modified/xgalaga-2.1.1.0/data.c
+--- xgal-pristine/xgalaga-2.1.1.0/data.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/data.c	2026-10-15 20:23:17.353674027 -0500
+@@ -59,10 +59,35 @@
+ int weapon = 0;
+ int maxtorps = 4, numtorps = 0;
+ 
+-int plx = 200;
++/* Minimum torps per weapon, rising every 15 levels (the level cycle
++ * repeats after 15):
++ *   SINGLE  3, 5, 7, 9, ...
++ *   DOUBLE  4, 6, 8, 10, ...
++ *   TRIPLE  6, 9, 12, 15, ...
++ *   SPREAD  5, 7, 9, 11, ...
++ *   MACHINE 3, 5, 7, 9, ...
++ * capped at MAXTORPS.  Difficulty still ramps via enemies; this only
++ * stops the player from falling below a usable floor as levels stack. */
++int weapon_mintorps(int weapon, int level)
++{
++    static const int base[] = {3, 4, 6, 5, 3}; /* single, double, triple, spread, machine */
++    static const int step[] = {2, 2, 3, 2, 2};
++    int mn;
++
++    if(weapon < 0 || weapon >= NUMWEAPONS)
++        weapon = 0;
++    if(level < 1)
++        level = 1;
++    mn = base[weapon] + step[weapon] * ((level - 1) / 15);
++    if(mn > MAXTORPS)
++        mn = MAXTORPS;
++    return mn;
++}
++
++float plx = 200;
+ int pldead = 0;
+ 
+-int movespeed = MINSPEED;
++float movespeed = MINSPEED;
+ 
+ #ifdef SOUND
+ char *unixSoundPath=SOUNDDIR;
+@@ -76,7 +101,7 @@
+ int shieldsleft = 0;
+ int shieldon = 0;
+ 
+-int title_page=0, pagetimer=300;
++int title_page=0, pagetimer=600; /* was 300 @ 30Hz: doubled for 60Hz */
+ 
+ int gotlemon = 0;
+ 
+diff -r xgal-pristine/xgalaga-2.1.1.0/data.h modified/xgalaga-2.1.1.0/data.h
+--- xgal-pristine/xgalaga-2.1.1.0/data.h	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/data.h	2026-10-15 20:23:17.353708862 -0500
+@@ -43,10 +43,10 @@
+ extern int weapon;
+ extern int maxtorps, numtorps;
+ 
+-extern int plx;
++extern float plx;
+ extern int pldead;
+ 
+-extern int movespeed;
++extern float movespeed;
+ 
+ #ifdef SOUND
+ extern char *unixSoundPath;
+diff -r xgal-pristine/xgalaga-2.1.1.0/defs.h modified/xgalaga-2.1.1.0/defs.h
+--- xgal-pristine/xgalaga-2.1.1.0/defs.h	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/defs.h	2026-10-15 20:23:17.353745582 -0500
+@@ -15,16 +15,16 @@
+ # define NO_PRIZE_WHILE_DEAD
+ #endif
+ 
+-#define MAXTORPS 10
++#define MAXTORPS 15
+ #define MINTORPS 3
+-#define TORPSPEED 12
++#define TORPSPEED 6      /* was 12 @ 30Hz: halved for 60Hz, same px/s */
+ 
+-#define ETORPSPEED 8
++#define ETORPSPEED 4     /* was 8 @ 30Hz: halved for 60Hz, same px/s */
+ 
+-#define MINSPEED 3
+-#define MAXSPEED 8
++#define MINSPEED 1.5     /* was 3 @ 30Hz: halved for 60Hz */
++#define MAXSPEED 4.0     /* was 8 @ 30Hz: halved for 60Hz */
+ 
+-#define TORPDELAY 5
++#define TORPDELAY 10     /* was 5 frames @ 30Hz: doubled ticks, same seconds */
+ 
+ #define WINWIDTH  winwidth  /* was 400 */
+ #define WINHEIGHT winheight /* was 500 */
+@@ -33,7 +33,7 @@
+ 
+ #define MAXALIENS 60
+ 
+-#define TURNSPEED 10
++#define TURNSPEED 20     /* was 10 frames @ 30Hz: doubled ticks */
+ 
+ #define UTIMER 33333
+ 
+@@ -41,6 +41,9 @@
+ 
+ #define ABS(a)			/* abs(a) */ (((a) < 0) ? -(a) : (a))
+ 
++/* Round a float pixel coordinate for the int Wlib drawing API. */
++#define PX(x) ((int)((x) + (((x) < 0.0f) ? -0.5f : 0.5f)))
++
+ #define LEFTKEY 1
+ #define RIGHTKEY 2
+ #define FIREKEY 4
+@@ -73,11 +76,11 @@
+ #define TORPCHANCE 60
+ 
+ #ifdef ORIGINAL_XGALAGA
+-# define SHIELDTIME 300
++  #define SHIELDTIME 600
+ #else
+ # define STARTSHIELDS 0
+-# define MAXSHIELDS 800
+-# define SHIELDTIME 200
++# define MAXSHIELDS 1600  /* was 800 frames @ 30Hz: doubled ticks */
++# define SHIELDTIME 400   /* was 200 frames @ 30Hz: doubled ticks */
+ #endif
+ 
+ 
+diff -r xgal-pristine/xgalaga-2.1.1.0/explosions.c modified/xgalaga-2.1.1.0/explosions.c
+--- xgal-pristine/xgalaga-2.1.1.0/explosions.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/explosions.c	2026-10-15 20:23:17.353780948 -0500
+@@ -3,6 +3,7 @@
+ #include "copyright.h"
+ 
+ #include <config.h>
++#include "defs.h"
+ 
+ 
+ #include <stdlib.h>
+@@ -23,7 +24,7 @@
+     struct score_bubble *bub=first_bub, *nextbub;
+ 
+     while(bub) {
+-	W_CacheClearArea(baseWin, bub->x-(bub->shape->width/2), bub->y-(bub->shape->height/2), bub->shape->width, bub->shape->height);
++	W_CacheClearArea(baseWin, PX(bub->x-(bub->shape->width/2)), PX(bub->y-(bub->shape->height/2)), bub->shape->width, bub->shape->height);
+ 	nextbub = bub->next;
+ 	if(bub->count <= 0) {
+ 	    if(bub->prev)
+@@ -45,11 +46,11 @@
+     while(bub) {
+ 	if(!paused) {
+ 	    bub->count--;
+-	    bub->y--;
++	    bub->y -= 0.5f;   /* was 1 px @ 30Hz: halved per tick */
+ 	}
+ 	W_DrawImage(baseWin, 
+-		    bub->x-(bub->shape->width/2), 
+-		    bub->y-(bub->shape->height/2), 
++		    PX(bub->x-(bub->shape->width/2)), 
++		    PX(bub->y-(bub->shape->height/2)), 
+ 		    0, bub->shape, W_Red);
+ 	bub=bub->next;
+     }
+@@ -60,7 +61,7 @@
+     struct explosion *exp=first_exp, *nextexp;
+ 
+     while(exp) {
+-	W_CacheClearArea(baseWin, exp->x-(exp->shape->width/2), exp->y-(exp->shape->height/2), exp->shape->width, exp->shape->height);
++	W_CacheClearArea(baseWin, PX(exp->x-(exp->shape->width/2)), PX(exp->y-(exp->shape->height/2)), exp->shape->width, exp->shape->height);
+ 	nextexp = exp->next;
+ 	if(exp->frame >= exp->shape->frames) {
+ 	    if(exp->prev)
+@@ -82,17 +83,17 @@
+ 
+     while(exp) {
+ 	W_DrawImage(baseWin, 
+-		    exp->x-(exp->shape->width/2), 
+-		    exp->y-(exp->shape->height/2), 
++		    PX(exp->x-(exp->shape->width/2)), 
++		    PX(exp->y-(exp->shape->height/2)), 
+ 		    exp->frame, exp->shape, W_Red);
+ 	if(!paused) 
+-	    exp->frame++;
++	    if (!(counter & 1)) exp->frame++;  /* 30Hz animation */
+ 	exp=exp->next;
+     }
+     do_bubbles();
+ }
+ 
+-void new_explosion(int x, int y, int type)
++void new_explosion(float x, float y, int type)
+ {
+     struct explosion *exp;
+ 
+@@ -124,7 +125,7 @@
+ }
+ 
+ 
+-void score_flagship(int x, int y, int ne)
++void score_flagship(float x, float y, int ne)
+ {
+     struct score_bubble *bub;
+ 
+@@ -137,7 +138,7 @@
+ 
+     bub->x = x;
+     bub->y = y;
+-    bub->count=25;
++    bub->count=50;   /* was 25 @ 30Hz: doubled ticks */
+     bub->shape = bubbleImages[ne];
+     switch(ne) {
+       case 0:
+diff -r xgal-pristine/xgalaga-2.1.1.0/highscore.c modified/xgalaga-2.1.1.0/highscore.c
+--- xgal-pristine/xgalaga-2.1.1.0/highscore.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/highscore.c	2026-10-15 20:23:17.354149553 -0500
+@@ -31,12 +31,21 @@
+ #include "proto.h"
+ #include "data.h"
+ 
+-/* Global score file is insecure and rather useless today. */
++/* Native X11 build: the local score file is insecure/useless, so the
++ * "global" board is disabled (per-user scores only).  Web build: the
++ * "global" board is the shared online leaderboard (webglue.js fetches and
++ * submits it against the leaderboard API server), so enable it there.
++ *
++ * NO_GLOBAL_SCORES follows the upstream convention of a defined/undefined
++ * flag -- the rest of this file gates the global-board code with
++ * #ifndef NO_GLOBAL_SCORES -- so the web build must leave it UNDEFINED to
++ * enable the board; defining it to 0 would not (an #ifdef test only looks
++ * at definedness). */
++#ifdef __EMSCRIPTEN__
++#define NUM_GLOBAL_SCORES 20
++#else
+ #define NO_GLOBAL_SCORES 1
+-#ifdef NO_GLOBAL_SCORES
+ #define NUM_GLOBAL_SCORES 0
+-#else
+-#define NUM_GLOBAL_SCORES 20
+ #endif
+ #define NUM_MY_SCORES 10
+ 
+@@ -162,7 +171,7 @@
+     close(hsf);
+ #endif /* NO_GLOBAL_SCORES */
+     if((home = getenv("HOME"))) {
+-#ifndef NO_GLOBAL_SCORES
++#if !defined(NO_GLOBAL_SCORES) && !defined(__EMSCRIPTEN__)
+ 	gid_t my_egid = getegid();
+ 	if (setgid(getgid()) != 0) {
+ 		perror("setgid");
+@@ -171,7 +180,7 @@
+ #endif
+ 	snprintf(my_file_name, sizeof(my_file_name)-1, "%s/.xgalscores", home);
+ 	hsf = open(my_file_name, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+-#ifndef NO_GLOBAL_SCORES
++#if !defined(NO_GLOBAL_SCORES) && !defined(__EMSCRIPTEN__)
+ 	if (setgid(my_egid) != 0) {
+ 		perror("setgid back");
+ 		exit(1);
+@@ -283,6 +292,9 @@
+ 	}
+     }
+     save_scores();
++#ifdef __EMSCRIPTEN__
++    xgal_web_submit(name, score, level);
++#endif
+ }
+ 
+ int score_key(W_Event *ev)
+@@ -295,7 +307,7 @@
+ 	    getting_name = 0;
+ 	    add_score(new_name, score);
+ 	    title_page = 1;
+-	    pagetimer = 300;
++	    pagetimer = 600;   /* was 300 @ 30Hz: doubled ticks */
+ 	    W_ClearWindow(baseWin);
+ 	    break;
+ 	  case 8:
+@@ -354,7 +366,8 @@
+ 
+ void show_scores()
+ {
+-    int i;
++    int i, n, place;
++    struct high_score *board;
+     char buf[60];
+     W_Color color;
+ 
+@@ -362,30 +375,30 @@
+ 
+     color = W_DarkGrey;
+ 
+-    
+ #ifndef NO_GLOBAL_SCORES
+-    center_text("Global high scores", 90, W_Yellow);
++    /* Web build: the board is the shared online leaderboard; the current
++     * user's score is highlighted directly on it (thisplace, set by
++     * add_score()). */
++    board = global_scores;
++    n = NUM_GLOBAL_SCORES;
++    place = thisplace;
++#else
++    /* Native build: there is no shared board, so the per-user board is
++     * the board (highlighted via my_thisplace). */
++    board = my_scores;
++    n = NUM_MY_SCORES;
++    place = my_thisplace;
++#endif
++
++    center_text("High scores", 90, W_Yellow);
+     sprintf(buf, "Rank  Name                      Score   Level");
+     center_text(buf, 100, W_Yellow);
+     W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 111,
+ 	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 111, W_Red);
+-    for(i=0;i<NUM_GLOBAL_SCORES;i++) {
+-	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1, 
+-		global_scores[i].name, global_scores[i].score,global_scores[i].level);
+-	center_text(buf, 112+i*W_Textheight, (i==thisplace ? color : W_Grey));
+-    }
+-#endif
+-    
+-    center_text("Your high scores", 112+NUM_GLOBAL_SCORES*W_Textheight, W_Yellow);
+-    sprintf(buf, "Rank  Name                      Score   Level");
+-    center_text(buf, 112+(NUM_GLOBAL_SCORES+1)*W_Textheight, W_Yellow);
+-    W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 123+(NUM_GLOBAL_SCORES+1)*W_Textheight,
+-	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 123+(NUM_GLOBAL_SCORES+1)*W_Textheight, W_Red);
+-    for(i=0;i<NUM_MY_SCORES;i++) {
+-	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1, 
+-		my_scores[i].name, my_scores[i].score,my_scores[i].level);
+-	center_text(buf, 124+(NUM_GLOBAL_SCORES+1)*W_Textheight + i*W_Textheight, 
+-		    (i==my_thisplace ? color : W_Grey));
++    for(i=0;i<n;i++) {
++	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1,
++		board[i].name, board[i].score, board[i].level);
++	center_text(buf, 112+i*W_Textheight, (i==place ? color : W_Grey));
+     }
+ }
+ 
+diff -r xgal-pristine/xgalaga-2.1.1.0/main.c modified/xgalaga-2.1.1.0/main.c
+--- xgal-pristine/xgalaga-2.1.1.0/main.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/main.c	2026-10-15 20:23:17.354063020 -0500
+@@ -27,12 +27,13 @@
+ struct star stars[NUMSTARS];
+ struct torp *first_etorp=0;
+ 
+-static int convoyx = 0, convoymove = 1;
++static float convoyx = 0;
++static int convoymove = 1;
+ static int livecount = 0;
+ static int starspeed = 1;
+ static int attacking = 0, maxattacking, entering=0;
+ static int maxetorps = 5, numetorps=0;
+-static int plflash = 50;
++static int plflash = 100;   /* was 50 @ 30Hz: doubled ticks */
+ static int fullscreen = 0;
+ #ifndef ORIGINAL_XGALAGA
+ static int shots = 0;
+@@ -42,25 +43,44 @@
+ #define convoy_x_pos(i) (convoyx+(20 * (i - 10 * (i/10))))
+ #define convoy_y_pos(i) (20 + (20*(i/10)))
+ 
+-static int moves[16][2] = {
+-    {0,-4},
+-    {1,-4},
+-    {3,-3},
+-    {4,-1},
+-    {4,0},
+-    {4,1},
+-    {3,3},
+-    {1,4},
+-    {0,4},
+-    {-1,4},
+-    {-3,3},
+-    {-4,1},
+-    {-4,0},
+-    {-4,-1},
+-    {-3,-3},
+-    {-1,-4}
++/* Per-tick moves in px, halved for 60Hz (was x2 @ 30Hz); same px/s. */
++static float moves[16][2] = {
++    {0,-2},
++    {1,-2},
++    {1.5f,-1.5f},
++    {2,-0.5f},
++    {2,0},
++    {2,0.5f},
++    {1.5f,1.5f},
++    {1,2},
++    {0,2},
++    {-1,2},
++    {-1.5f,1.5f},
++    {-2,0.5f},
++    {-2,0},
++    {-2,-0.5f},
++    {-1.5f,-1.5f},
++    {-1,-2}
+ };
+ 
++/* Per-tick move that reproduces the original 30Hz integer arithmetic
++ * exactly: the original moved m + metaLevel*m/2 px per 30Hz frame
++ * (integer division: on the 3px diagonal that is 3+1=4 at metaLevel 1),
++ * so the same trajectory at 60Hz is (that) / 2 px per tick.  The earlier
++ * float halving (moves[] + metaLevel*moves[]/2) made the
++ * odd-component directions ~25% too fast, which widened the level 8
++ * slither (sse/ssw segments) compared with the original. */
++static float enter_speed(int dir, int axis)
++{
++    static const int m30[16][2] = {
++        {0,-4},{1,-4},{3,-3},{4,-1},{4,0},{4,1},{3,3},{1,4},
++        {0,4},{-1,4},{-3,3},{-4,1},{-4,0},{-4,-1},{-3,-3},{-1,-4}
++    };
++    int m = m30[dir][axis];
++
++    return (m + (metaLevel * m) / 2) / 2.0f;
++}
++
+ void
+ xgal_exit(int v)
+ {
+@@ -126,7 +146,7 @@
+     for(i=0;i<NUMSTARS;i++) {
+         stars[i].x = random()%WINWIDTH;
+         stars[i].y = random()%WINHEIGHT;
+-        stars[i].speed = (random()%3)+1;
++        stars[i].speed = ((random()%3)+1) * 0.5f; /* halved for 60Hz */
+         switch(random()%5) {
+         case 0:
+             stars[i].color = W_White;
+@@ -155,7 +175,7 @@
+     
+     if(wantStars) {
+         for(i=0;i<NUMSTARS;i++) {
+-            W_DrawPoint(baseWin, stars[i].x, stars[i].y, W_Black);
++            W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), W_Black);
+         }
+     }
+     if(drewlevel) {
+@@ -174,7 +194,7 @@
+             if(!paused)
+                 stars[i].y+=stars[i].speed*((starspeed < 20) ? ABS(starspeed) : 20);
+             if(stars[i].y >= WINHEIGHT) {
+-                stars[i].y-=WINHEIGHT+starspeed;
++                stars[i].y-=WINHEIGHT+0.5f*starspeed;
+                 stars[i].x = random() % WINWIDTH;
+                 switch(random()%5) {
+                 case 0:
+@@ -194,7 +214,7 @@
+                     break;
+                 }
+             }
+-            W_DrawPoint(baseWin, stars[i].x, stars[i].y, stars[i].color);
++            W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), stars[i].color);
+         }
+ #ifdef SHOW_SHIELD_BAR
+ 	    if ((plshield > 0) || (shieldsleft > 0)) { 
+@@ -297,8 +317,8 @@
+     for(i=0;i<MAXALIENS;i++) {
+         if(aliens[i].alive)
+             W_ClearArea(baseWin, 
+-                        aliens[i].x-(aliens[i].shape->width/2), 
+-                        aliens[i].y-(aliens[i].shape->height/2),
++                        PX(aliens[i].x-(aliens[i].shape->width/2)), 
++                        PX(aliens[i].y-(aliens[i].shape->height/2)),
+                         aliens[i].shape->width, aliens[i].shape->height);
+         if(aliens[i].dying) {
+             aliens[i].alive = 0;
+@@ -317,11 +337,11 @@
+     } else if(aliens[fs].dir >= 0) {
+         aliens[i].dir = aliens[fs].dir;
+     } else {
+-        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + convoymove;
++        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + 0.5f * convoymove;
+         aliens[i].y = -10;
+         aliens[i].dir = -2;
+         aliens[i].path = -1;
+-        aliens[i].steer = 2;
++        aliens[i].steer = 4;   /* was 2 @ 30Hz: doubled ticks */
+         aliens[i].escorting = -1;
+     }
+ }
+@@ -329,11 +349,11 @@
+ static void
+ do_convoy(int i)
+ {
+-    aliens[i].x += convoymove;
++    aliens[i].x += 0.5f * convoymove;
+     if((entering == 0) &&
+        (attacking < maxattacking) && 
+        ((livecount < maxattacking) || 
+-        ((random()%10000) < (level + 2 *(48-(livecount)))))) {
++        ((random()%20000) < (level + 2 *(48-(livecount)))))) {
+         switch(random()%2) {
+         case 0:
+             path_dir(P_PEELLEFT, 0, &aliens[i].dir, &aliens[i].steer);
+@@ -357,7 +377,7 @@
+     }
+ }
+ 
+-static void new_etorp(int x, int y, int xs, int ys)
++static void new_etorp(float x, float y, float xs, float ys)
+ {
+     struct torp *t;
+ 
+@@ -388,8 +408,8 @@
+     }
+ 
+     if(aliens[i].path >= 0) {
+-        aliens[i].x += moves[aliens[i].dir][0] + metaLevel * moves[aliens[i].dir][0]/2;
+-        aliens[i].y += moves[aliens[i].dir][1] + metaLevel * moves[aliens[i].dir][1]/2;
++        aliens[i].x += enter_speed(aliens[i].dir, 0);
++        aliens[i].y += enter_speed(aliens[i].dir, 1);
+     
+         aliens[i].steer--;
+         if(aliens[i].steer <= 0) {
+@@ -405,19 +425,19 @@
+         }
+         tc = TORPCHANCE - level/2 - weapon*5;
+         if(tc < 35) tc = 35;
+-        if(numetorps < maxetorps && (!(random()%tc))) {
+-            int xs, ys;
++        if(numetorps < maxetorps && (!(random() % (tc*2)))) {
++            float xs, ys;
+         
+             /* could aim better, not sure it should! */
+         
+             if(aliens[i].x > plx + 200) {
+-                xs = -3;
++                xs = -1.5f;
+             } else if(aliens[i].x > plx + 100) {
+-                xs = -2;
++                xs = -1.0f;
+             } else if(aliens[i].x < plx - 200) {
+-                xs = 3;
++                xs = 1.5f;
+             } else if(aliens[i].x < plx - 100) {
+-                xs = 2;
++                xs = 1.0f;
+             } else {
+                 xs = 0;
+             }
+@@ -463,8 +483,8 @@
+ 		}
+ 	    }
+         }
+-        aliens[i].x += moves[aliens[i].dir][0] + metaLevel * moves[aliens[i].dir][0]/2;
+-        aliens[i].y += moves[aliens[i].dir][1] + metaLevel * moves[aliens[i].dir][1]/2;
++        aliens[i].x += enter_speed(aliens[i].dir, 0);
++        aliens[i].y += enter_speed(aliens[i].dir, 1);
+     }
+ }
+ 
+@@ -474,7 +494,7 @@
+     int tc;
+ 
+     if(!paused) {
+-        convoyx += convoymove;
++        convoyx += 0.5f * convoymove;
+         if(convoyx <= 0) {
+             convoyx=0;
+             convoymove = -convoymove;
+@@ -507,8 +527,8 @@
+                 } else if(aliens[i].dir == -1) {
+                     do_convoy(i);
+                 } else if(aliens[i].dir == -2) {
+-                    aliens[i].x += convoymove;
+-                    aliens[i].y+=2;
++                    aliens[i].x += 0.5f * convoymove;
++                    aliens[i].y+=1;   /* was 2 @ 30Hz: halved per tick */
+                     if(aliens[i].y >= 20 + (20*(i/10))) {
+                         aliens[i].y = 20 + (20*(i/10));
+                         aliens[i].dir = -1;
+@@ -522,11 +542,11 @@
+                         aliens[i].x = WINWIDTH+20;
+             
+                     if(aliens[i].y > WINHEIGHT) {
+-                        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + convoymove;
++                        aliens[i].x = 20 * (i - 10 * (i/10)) + convoyx + 0.5f * convoymove;
+                         aliens[i].y = -30;
+                         aliens[i].dir = -2;
+                         aliens[i].path = -1;
+-                        aliens[i].steer = 2;
++                        aliens[i].steer = 4;   /* was 2 @ 30Hz: doubled ticks */
+                         aliens[i].escorting = -1;
+                         attacking--;
+                         if(i < 10) {
+@@ -598,19 +618,19 @@
+                     tc = TORPCHANCE - level/2 - weapon*5;
+                     if(tc < 35) tc = 35;
+ 
+-                    if(numetorps < maxetorps && (!(random()%tc))) {
+-                        int xs, ys;
++                    if(numetorps < maxetorps && (!(random() % (tc*2)))) {
++                        float xs, ys;
+             
+                         /* could aim better, not sure it should! */
+ 
+                         if(aliens[i].x > plx + 200) {
+-                            xs = -3;
++                            xs = -1.5f;
+                         } else if(aliens[i].x > plx + 100) {
+-                            xs = -2;
++                            xs = -1.0f;
+                         } else if(aliens[i].x < plx - 200) {
+-                            xs = 3;
++                            xs = 1.5f;
+                         } else if(aliens[i].x < plx - 100) {
+-                            xs = 2;
++                            xs = 1.0f;
+                         } else {
+                             xs = 0;
+                         }
+@@ -619,18 +639,18 @@
+                     }
+                 }
+                 W_DrawImage(baseWin, 
+-                            aliens[i].x-(aliens[i].shape->width/2), 
+-                            aliens[i].y-(aliens[i].shape->height/2),
++                            PX(aliens[i].x-(aliens[i].shape->width/2)), 
++                            PX(aliens[i].y-(aliens[i].shape->height/2)),
+                             aliens[i].dir < 0 ? 0 : aliens[i].dir, aliens[i].shape, W_Green);
+             } else {  /* paused */
+                 W_DrawImage(baseWin, 
+-                            aliens[i].x-(aliens[i].shape->width/2), 
+-                            aliens[i].y-(aliens[i].shape->height/2),
++                            PX(aliens[i].x-(aliens[i].shape->width/2)), 
++                            PX(aliens[i].y-(aliens[i].shape->height/2)),
+                             aliens[i].dir < 0 ? 0 : aliens[i].dir, aliens[i].shape, W_Green);
+             }
+         }
+     }
+-    if(livecount == 0 && !paused) {
++    if(livecount == 0 && !paused && !(counter & 1)) {  /* warp state machine at 30Hz: the increment and the starspeed==1 level-start check must run on the same tick, as in the original 30Hz loop */
+         starspeed++;
+ #ifdef SOUND
+         if(starspeed == 2)
+@@ -656,7 +676,7 @@
+         torps[i].alive=0;
+ }
+ 
+-static void new_torp(int x, int y, int xs, int ys)
++static void new_torp(float x, float y, float xs, float ys)
+ {
+     int i;
+ 
+@@ -683,8 +703,8 @@
+     for(i=0;i<MAXTORPS;i++) {
+         if(torps[i].alive) {
+             W_CacheClearArea(baseWin, 
+-                             torps[i].x-(playerTorp->width/2), 
+-                             torps[i].y-(playerTorp->height/2), 
++                             PX(torps[i].x-(playerTorp->width/2)), 
++                             PX(torps[i].y-(playerTorp->height/2)), 
+                              playerTorp->width, playerTorp->height+1);
+         }
+     }
+@@ -699,7 +719,7 @@
+             if(!paused) {
+                 torps[i].y += torps[i].yspeed;
+                 torps[i].x += torps[i].xspeed;
+-                torps[i].frame++;
++                if (!(counter & 1)) torps[i].frame++;  /* 30Hz animation */
+                 for(j=0;j<MAXALIENS;j++) {
+                     if(aliens[j].alive && !aliens[j].dying &&
+                        (ABS(torps[i].x - aliens[j].x) < 8) &&
+@@ -743,14 +763,14 @@
+                     numtorps--;
+                 } else
+                     W_DrawImage(baseWin, 
+-                                torps[i].x-(playerTorp->width/2), 
+-                                torps[i].y-(playerTorp->height/2), 
++                                PX(torps[i].x-(playerTorp->width/2)), 
++                                PX(torps[i].y-(playerTorp->height/2)), 
+                                 torps[i].frame, playerTorp, W_Red);
+             skip: ;
+             } else {/* paused */
+                 W_DrawImage(baseWin, 
+-                            torps[i].x-(playerTorp->width/2), 
+-                            torps[i].y-(playerTorp->height/2), 
++                            PX(torps[i].x-(playerTorp->width/2)), 
++                            PX(torps[i].y-(playerTorp->height/2)), 
+                             torps[i].frame, playerTorp, W_Red);
+             }
+         }
+@@ -767,7 +787,7 @@
+             if(!paused) {
+                 t->y+=t->yspeed;
+                 t->x+=t->xspeed;
+-                t->frame++;
++                if (!(counter & 1)) t->frame++;  /* 30Hz animation */
+                 if(t->y > WINHEIGHT || t->x < 0 || t->x > WINWIDTH) {
+                     if(t->next)
+                         t->next->prev = t->prev;
+@@ -784,14 +804,14 @@
+                     new_explosion(plx, WINHEIGHT - playerShip->height/2, 2);
+                 } else {
+                     W_DrawImage(baseWin, 
+-                                t->x-(enemyTorp->width/2), 
+-                                t->y-(enemyTorp->height/2), 
++                                PX(t->x-(enemyTorp->width/2)), 
++                                PX(t->y-(enemyTorp->height/2)), 
+                                 t->frame, enemyTorp, W_Red);
+                 }
+             } else {
+                 W_DrawImage(baseWin, 
+-                            t->x-(enemyTorp->width/2), 
+-                            t->y-(enemyTorp->height/2), 
++                            PX(t->x-(enemyTorp->width/2)), 
++                            PX(t->y-(enemyTorp->height/2)), 
+                             t->frame, enemyTorp, W_Red);
+             }
+         }
+@@ -805,8 +825,8 @@
+ 
+     while(t) {
+         W_CacheClearArea(baseWin, 
+-                         t->x-(enemyTorp->width/2), 
+-                         t->y-(enemyTorp->width/2), 
++                         PX(t->x-(enemyTorp->width/2)), 
++                         PX(t->y-(enemyTorp->width/2)), 
+                          enemyTorp->width, enemyTorp->height);
+         t=t->next;
+     }
+@@ -819,7 +839,7 @@
+         y -= 3;
+         h += 3;
+     }
+-    W_CacheClearArea(baseWin, plx-(playerShip->width/2), y,
++    W_CacheClearArea(baseWin, PX(plx-(playerShip->width/2)), y,
+                      playerShip->width, h);
+ }
+ 
+@@ -837,20 +857,13 @@
+         while(W_EventsPending()) {
+             W_NextEvent(&wev);
+         
+-	    if(gameOver)
+-	      mouseControl = 1;
+ 
++
+             switch(wev.type) {
+             case W_EV_KEY:
+                 if(score_key(&wev))
+                     continue;
+                 switch(wev.key) {
+-                case 'q':
+-                case 'Q':
+-                case 256+'Q':   //369:
+-                case 256+'q':   //337:
+-                    xgal_exit(0);
+-                    break;
+                 case 'm':
+                 case 256+'m':    //365:
+                     mouseControl = 2;
+@@ -860,6 +873,12 @@
+                      mouseControl = 0;
+                      W_UngrabPointer();
+                      break;
++                case 'q':
++                case 256+'q':
++                case 'Q':
++                case 256+'Q':
++                    xgal_exit(0);
++                    break;
+                 case '\r'+256:
+                     W_ToggleFullscreen(shellWin);
+                     fullscreen = !fullscreen;
+@@ -888,7 +907,11 @@
+                     if(mouseControl)
+                         W_GrabPointer(baseWin);
+                     gameOver = 0;
+-                    maxtorps = MINTORPS;
++                    keys = 0;   /* no stale key state: a movement key
++                                 * released while the game-over screen was
++                                 * up is swallowed there (no W_EV_KEY_OFF
++                                 * handling), and 'keys' persists */
++                    maxtorps = weapon_mintorps(SINGLESHOT, startLevel);
+                     weapon = 0;
+                     movespeed = MINSPEED;
+                     ships=2;
+@@ -988,7 +1011,6 @@
+             case 256+'Q':       //337:
+                 xgal_exit(0);
+                 break;
+-            case 'b':
+             case 256+'b':       //354:
+                 W_Buffer(baseWin, !W_IsBuffered(baseWin));
+                 W_ClearWindow(baseWin);
+@@ -1048,7 +1070,7 @@
+             case 256+'t':       //372:
+                 maxtorps++;
+                 if(maxtorps > MAXTORPS)
+-                    maxtorps = MINTORPS;
++                    maxtorps = weapon_mintorps(weapon, level);
+                 break;
+ #endif /* IM_A_BIG_FAT_CHEATER */
+             case '\r'+256:
+@@ -1090,14 +1112,14 @@
+         
+         if(pldead) {
+             pldead++;
+-            if(pldead >= 100) {
++            if(pldead >= 200) {   /* was 100 @ 30Hz: doubled ticks */
+                 if(ships<=0) {
+                     gameOver = 1;
+                     W_UngrabPointer();
+                     if(check_score(score)) {
+ #ifdef USE_REAL_NAMES
+                         add_score(getUsersFullName(), score);
+-                        title_page = 1; pagetimer = 300;
++                        title_page = 1; pagetimer = 600;
+ #else
+                         getting_name = 1;
+ #endif
+@@ -1106,42 +1128,11 @@
+ #ifdef DISABLE_RESET_ON_DEATH
+                     ships--;
+                     maxtorps--;
+-                    if (maxtorps < MINTORPS)
+-                    	maxtorps = MINTORPS;
+-                    switch (weapon)
+                     {
+-                    	case SINGLESHOT:
+-                    		if (maxtorps < 3)
+-                    		{
+-                    			maxtorps = 3;
+-                    			weapon = SINGLESHOT;
+-                    		}
+-                    		break;
+-                    	case DOUBLESHOT:
+-	                    	if (maxtorps < 4)
+-                    		{
+-                    			maxtorps = 4;
+-                    		}
+-        					break;
+-                   		case SPREADSHOT:
+-                    		if (maxtorps < 5)
+-                    		{
+-                    			maxtorps = 5;
+-                    		}
+-                    		break;
+-						case TRIPLESHOT:
+-							if (maxtorps < 6)
+-                    		{
+-                    			maxtorps = 6;
+-                    		}
+-                    		break;
+-                    	case MACHINEGUN:
+-                    		if (maxtorps < 3)
+-                    		{
+-                    			maxtorps = 3;
+-                    		}
+-                    		break;
+-		}
++                        int mn = weapon_mintorps(weapon, level);
++                        if (maxtorps < mn)
++                            maxtorps = mn;
++                    }
+ #else
+                     ships--;
+                     maxtorps = MINTORPS;
+@@ -1149,7 +1140,7 @@
+                     movespeed = MINSPEED;
+ #endif /* DISABLE_RESET_ON_DEATH */
+                     pldead = 0;
+-                    plflash = 50;
++                    plflash = 100;  /* was 50 @ 30Hz: doubled ticks */
+                     plx = WINWIDTH/2;
+                 }
+             }
+@@ -1172,9 +1163,9 @@
+                 break;
+             case TRIPLESHOT:
+                 if(numtorps < maxtorps-2) {
+-                    new_torp(plx-5, WINHEIGHT - playerShip->height, -2, 1-TORPSPEED);
++                    new_torp(plx-5, WINHEIGHT - playerShip->height, -1, 0.5f-TORPSPEED);
+                     new_torp(plx,   WINHEIGHT - playerShip->height, 0,   -TORPSPEED);
+-                    new_torp(plx+5, WINHEIGHT - playerShip->height, 2, 1-TORPSPEED);
++                    new_torp(plx+5, WINHEIGHT - playerShip->height, 1, 0.5f-TORPSPEED);
+ 		    torpok = TORPDELAY;
+                 }
+                 break;
+@@ -1191,28 +1182,28 @@
+ 			}
+ 			if (maxtorps > 2)
+ 			{
+-				new_torp(plx, WINHEIGHT - playerShip->height - 15, -2, -TORPSPEED*1.15);
+-				new_torp(plx, WINHEIGHT - playerShip->height - 15, 2, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 15, -1, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 15, 1, -TORPSPEED*1.15);
+ 			}
+ 			if (maxtorps > 4)
+ 			{
+-				new_torp(plx, WINHEIGHT - playerShip->height - 25, -4, -TORPSPEED*1.15);
+-				new_torp(plx, WINHEIGHT - playerShip->height - 25, 4, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 25, -2, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 25, 2, -TORPSPEED*1.15);
+ 			}
+ 			if (maxtorps > 6)
+ 			{
+-				new_torp(plx, WINHEIGHT - playerShip->height - 35, -6, -TORPSPEED*1.15);
+-				new_torp(plx, WINHEIGHT - playerShip->height - 35, 6, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 35, -3, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 35, 3, -TORPSPEED*1.15);
+ 			}
+ 			if (maxtorps > 8)
+ 			{
+-				new_torp(plx, WINHEIGHT - playerShip->height - 50, -8, -TORPSPEED*1.15);    
+-				new_torp(plx, WINHEIGHT - playerShip->height - 50, 8, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 50, -4, -TORPSPEED*1.15);    
++				new_torp(plx, WINHEIGHT - playerShip->height - 50, 4, -TORPSPEED*1.15);
+ 			}
+ 			if (maxtorps > 10)
+ 			{
+-				new_torp(plx, WINHEIGHT - playerShip->height - 60, -10, -TORPSPEED*1.15);
+-				new_torp(plx, WINHEIGHT - playerShip->height - 60, 10, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 60, -5, -TORPSPEED*1.15);
++				new_torp(plx, WINHEIGHT - playerShip->height - 60, 5, -TORPSPEED*1.15);
+                         }
+                         torpok = TORPDELAY;
+                  }
+@@ -1224,7 +1215,7 @@
+                  {
+ 			shotside = (shotside == -15) ? 15 : -15;
+ 			new_torp(plx + shotside, WINHEIGHT - playerShip->height, 0, -TORPSPEED * 1.3);
+-			torpok = TORPDELAY - 2;
++			torpok = TORPDELAY - 4;  /* was TORPDELAY-2 @ 30Hz: same 0.1s */
+ 		}
+ 		break;
+ #endif /* ENABLE_MACHINE_GUN */
+@@ -1256,16 +1247,16 @@
+     
+         if(plflash > 0)
+             plflash--;
+-        if(!(plflash % 2))
+-            W_DrawImage(baseWin, plx-(playerShip->width/2), WINHEIGHT - playerShip->height, counter, playerShip, W_Red);
++        if(!(plflash % 4))   /* was %2 @ 30Hz: same 60Hz blink */
++            W_DrawImage(baseWin, PX(plx-(playerShip->width/2)), WINHEIGHT - playerShip->height, counter/2, playerShip, W_Red);
+         if(plshield > 0)
+             plshield--;
+-        if(plshield && ((plshield > SHIELDTIME/4) || plshield % 2)) {
+-            W_DrawImage(baseWin, plx-(shieldImage->width/2), WINHEIGHT - shieldImage->height - 3, 0, shieldImage,
++        if(plshield && ((plshield > SHIELDTIME/4) || plshield % 4)) {
++            W_DrawImage(baseWin, PX(plx-(shieldImage->width/2)), WINHEIGHT - shieldImage->height - 3, 0, shieldImage,
+                         W_Cyan);
+         }
+     } else if (!pldead) { /* paused */
+-        W_DrawImage(baseWin, plx-(playerShip->width/2), WINHEIGHT - playerShip->height, counter, playerShip, W_Red);
++        W_DrawImage(baseWin, PX(plx-(playerShip->width/2)), WINHEIGHT - playerShip->height, counter/2, playerShip, W_Red);
+     }
+ }
+ 
+diff -r xgal-pristine/xgalaga-2.1.1.0/pathfile.c modified/xgalaga-2.1.1.0/pathfile.c
+--- xgal-pristine/xgalaga-2.1.1.0/pathfile.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/pathfile.c	2026-10-15 20:23:17.353817848 -0500
+@@ -386,7 +386,7 @@
+     return al_paths[anum];
+ }
+ 
+-void get_xy(int anum, int* x, int* y)
++void get_xy(int anum, float* x, float* y)
+ {
+     *x = (WINWIDTH  * pathinfo[al_paths[anum]].startx) / 400;
+     *y = (WINHEIGHT * pathinfo[al_paths[anum]].starty) / 500;
+@@ -394,7 +394,7 @@
+ 
+ int get_delay(int anum)
+ {
+-    return al_delays[anum];
++    return al_delays[anum] * 2;  /* 30Hz frames -> 60Hz ticks */
+ }
+ 
+ int get_dir(int pnum, int pos)
+@@ -404,7 +404,7 @@
+ 
+ int get_duration(int pnum, int pos)
+ {
+-    return epaths[pnum][pos].duration;
++    return epaths[pnum][pos].duration * 2;  /* 30Hz frames -> 60Hz ticks */
+ }
+ 
+ int get_shape(int anum)
+diff -r xgal-pristine/xgalaga-2.1.1.0/paths.c modified/xgalaga-2.1.1.0/paths.c
+--- xgal-pristine/xgalaga-2.1.1.0/paths.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/paths.c	2026-10-15 20:23:17.353856661 -0500
+@@ -1166,7 +1166,7 @@
+ void path_dir(int path, int pos, int *dir, int *steer)
+ {
+     *dir =   paths[path][pos][0];
+-    *steer = paths[path][pos][1];
++    *steer = paths[path][pos][1] * 2;  /* 30Hz frames -> 60Hz ticks */
+ }
+ 
+ void enter_path_dir(int path, int pos, int *dir, int *steer)
+@@ -1196,7 +1196,7 @@
+ 
+     al->path = path;
+     al->path_pos = i;
+-    al->steer = paths[path][i][1];
++    al->steer = paths[path][i][1] * 2;
+ }
+ 
+ void new_alien(int level, int anum, struct alien *al)
+diff -r xgal-pristine/xgalaga-2.1.1.0/prize.c modified/xgalaga-2.1.1.0/prize.c
+--- xgal-pristine/xgalaga-2.1.1.0/prize.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/prize.c	2026-10-15 20:23:17.353907567 -0500
+@@ -42,13 +42,14 @@
+ # endif /* ENABLE_SPREAD_SHOT */
+ #endif /* ENABLE_MACHINE_GUN */
+ 
+-#define PRIZESPEED 3
++#define PRIZESPEED 1.5  /* was 3 px @ 30Hz: halved per tick */
+ 
+ W_Image *prizeImages[NUMPRIZES];
+     
+ struct prize {
+     struct prize *next, *prev;
+-    int x, y, type, dying;
++    float x, y;
++    int type, dying;
+ } *first_prize; /* 8-) */
+ 
+ void init_prizes()
+@@ -70,7 +71,7 @@
+ #endif 
+ }
+     
+-void new_prize(int x, int y)
++void new_prize(float x, float y)
+ {
+     struct prize *p;
+ 
+@@ -94,7 +95,7 @@
+ 	nextp = p->next;
+ 
+ 	W_CacheClearArea(baseWin, 
+-			 p->x-prizeImages[p->type]->width/2, p->y-prizeImages[p->type]->width/2,
++			 PX(p->x-prizeImages[p->type]->width/2), PX(p->y-prizeImages[p->type]->width/2),
+ 			 prizeImages[p->type]->width+1, prizeImages[p->type]->height);
+ 	if(p->dying) {
+ 	    if(p->next)
+@@ -121,7 +122,7 @@
+ 	if(!paused)
+ 	    p->y+=PRIZESPEED;
+ 	W_DrawImage(baseWin, 
+-		    p->x-prizeImages[p->type]->width/2, p->y-prizeImages[p->type]->width/2,
++		    PX(p->x-prizeImages[p->type]->width/2), PX(p->y-prizeImages[p->type]->width/2), 
+ 		    0, prizeImages[p->type], W_Green);
+ 
+ 	if(p->y > (WINHEIGHT-20) && (ABS(p->x - plx) < 15)
+@@ -145,8 +146,11 @@
+ 		    maxtorps++;
+ 		else {
+ 		    weapon = DOUBLESHOT;
+-		    if(maxtorps < 4)
+-			maxtorps = 4;
++		    {
++			int mn = weapon_mintorps(DOUBLESHOT, level);
++			if (maxtorps < mn)
++			    maxtorps = mn;
++		    }
+ 		}
+ 		break;
+ 	      case PR_TRIP:
+@@ -154,13 +158,16 @@
+ 		    maxtorps++;
+ 		else {
+ 		    weapon = TRIPLESHOT;
+-		    if(maxtorps < 6)
+-			maxtorps=6;
++		    {
++			int mn = weapon_mintorps(TRIPLESHOT, level);
++			if (maxtorps < mn)
++			    maxtorps = mn;
++		    }
+ 		}
+ 		break;
+ 	      case PR_SPEED:
+ 		if(movespeed < MAXSPEED)
+-		    movespeed++;
++		    movespeed += 0.5f;   /* was ++ on int steps: same 6 levels */
+ 		break;
+ #ifdef ENABLE_SPREAD_SHOT
+               case PR_SPREAD:
+@@ -168,9 +175,12 @@
+                     maxtorps++;
+                 else {
+                     weapon = SPREADSHOT;
+-                    if (maxtorps < 5)
+-                       maxtorps = 5;
+-		}
++                    {
++			int mn = weapon_mintorps(SPREADSHOT, level);
++			if (maxtorps < mn)
++			    maxtorps = mn;
++                    }
++                }
+ 		break;
+ #endif /* ENABLE_SPREAD_SHOT */
+ #ifdef ENABLE_MACHINE_GUN
+@@ -179,8 +189,11 @@
+                    maxtorps++;
+                 else {
+                    weapon = MACHINEGUN;
+-                   if (maxtorps < 3)
+-                      maxtorps = 3;
++                   {
++			int mn = weapon_mintorps(MACHINEGUN, level);
++			if (maxtorps < mn)
++			    maxtorps = mn;
++                   }
+                 }
+                 break;
+ #endif /* ENABLE_MACHINE_GUN */
+@@ -247,7 +260,7 @@
+ 		break;
+ 	      case PR_LEMON:
+ 		gotlemon = 1;
+-		maxtorps = MINTORPS;
++		maxtorps = weapon_mintorps(0, level);
+ 		weapon = 0;
+ 		movespeed = MINSPEED;
+ 		break;
+diff -r xgal-pristine/xgalaga-2.1.1.0/proto.h modified/xgalaga-2.1.1.0/proto.h
+--- xgal-pristine/xgalaga-2.1.1.0/proto.h	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/proto.h	2026-10-15 20:23:17.354112784 -0500
+@@ -9,6 +9,8 @@
+ void loadImageByFilename(char *filename);
+ void loadAllImages(void);
+ /* data.c */
++/* Minimum torps per weapon at the given level (rises every 15 levels). */
++int weapon_mintorps(int weapon, int level);
+ /* paths.c */
+ void path_dir(int path, int pos, int *dir, int *steer);
+ void enter_path_dir(int path, int pos, int *dir, int *steer);
+@@ -23,8 +25,8 @@
+ /* explosions.c */
+ void undo_explosions(void);
+ void do_explosions(void);
+-void new_explosion(int x, int y, int type);
+-void score_flagship(int x, int y, int ne);
++void new_explosion(float x, float y, int type);
++void score_flagship(float x, float y, int ne);
+ void init_explosions(void);
+ /* score.c */
+ void undo_score(void);
+@@ -41,9 +43,13 @@
+ void show_scores(void);
+ void load_scores(void);
+ void print_scores(void);
++#ifdef __EMSCRIPTEN__
++void xgal_web_submit(const char *name, long score, long level);
++void xgal_web_refresh(void);
++#endif
+ /* prize.c */
+ void init_prizes(void);
+-void new_prize(int x, int y);
++void new_prize(float x, float y);
+ void undo_prizes(void);
+ void do_prizes(void);
+ /* sound.c */
+@@ -54,7 +60,7 @@
+ void kill_sound(void);
+ /* pathfile.c */
+ int get_path(int);
+-void get_xy(int, int*, int*);
++void get_xy(int, float*, float*);
+ int get_delay(int);
+ int get_dir(int, int);
+ int get_duration(int, int);
+diff -r xgal-pristine/xgalaga-2.1.1.0/score.c modified/xgalaga-2.1.1.0/score.c
+--- xgal-pristine/xgalaga-2.1.1.0/score.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/score.c	2026-10-15 20:23:17.353947602 -0500
+@@ -62,7 +62,7 @@
+ 
+     if (drawExtra) 
+     {
+-	extrax += 10;
++	extrax += 5;   /* was 10 px @ 30Hz: halved per tick */
+ 	W_DrawImage(baseWin, extrax-(extraImage->width/2), extray-(extraImage->height/2), 0, extraImage, W_White);
+ 	if((extrax-(int)extraImage->width/2) > WINWIDTH)
+ 	    drawExtra = 0;
+diff -r xgal-pristine/xgalaga-2.1.1.0/struct.h modified/xgalaga-2.1.1.0/struct.h
+--- xgal-pristine/xgalaga-2.1.1.0/struct.h	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/struct.h	2026-10-15 20:23:17.353982758 -0500
+@@ -6,18 +6,18 @@
+ struct torp {
+     struct torp *next, *prev;
+     int alive, frame;
+-    int x, y;
+-    int xspeed, yspeed;
++    float x, y;
++    float xspeed, yspeed;
+ };
+ 
+ struct star {
+-    int x, y;
+-    int speed;
++    float x, y;
++    float speed;
+     W_Color color;
+ };
+ 
+ struct alien {
+-    int x, y;
++    float x, y;
+     int dir;
+     int steer;
+     int alive;
+@@ -30,14 +30,14 @@
+ 
+ struct explosion {
+     struct explosion *next, *prev;
+-    int x, y;
++    float x, y;
+     int frame;
+     W_Image *shape;
+ };
+ 
+ struct score_bubble {
+     struct score_bubble *next, *prev;
+-    int x, y;
++    float x, y;
+     int count;
+     W_Image *shape;
+ };
+diff -r xgal-pristine/xgalaga-2.1.1.0/title.c modified/xgalaga-2.1.1.0/title.c
+--- xgal-pristine/xgalaga-2.1.1.0/title.c	2008-03-05 15:58:16.000000000 -0600
++++ modified/xgalaga-2.1.1.0/title.c	2026-10-15 20:23:17.354018125 -0500
+@@ -8,6 +8,9 @@
+ #ifdef HAVE_FCNTL_H
+ # include <fcntl.h>
+ #endif
++#ifdef HAVE_UNISTD_H
++# include <unistd.h>
++#endif
+ #include "math.h"
+ #include "Wlib.h"
+ #include "defs.h"
+@@ -17,18 +20,19 @@
+ #include "proto.h"
+ 
+ /* for scrolling credits */
+-const LINESIZE= 70;
+-const VISIBLELINES=7;
+-const SPEEDFACTOR=5;
++const int LINESIZE= 70;
++const int VISIBLELINES=7;
++const int SPEEDFACTOR=10;  /* was 5 @ 30Hz: doubled ticks for same scroll rate */
+ char *gchLBuf;
+ int giCreditLines=0, giActCreditLine=0;
+ 
+ W_Image *pauseImage, *titleImage;
+-int pausex, pausey, pauseyspeed=1;
++int pausex;
++float pausey, pauseyspeed=1;
+ 
+ void undo_pause()
+ {
+-    W_CacheClearArea(baseWin, pausex-(pauseImage->width/2), pausey-(pauseImage->height/2), 
++    W_CacheClearArea(baseWin, pausex-(pauseImage->width/2), PX(pausey-(pauseImage->height/2)), 
+ 		     pauseImage->width, pauseImage->height);
+ }
+ 
+@@ -38,7 +42,7 @@
+ 	pauseyspeed = -pauseyspeed;
+     pausey+=pauseyspeed;
+ 
+-    W_DrawImage(baseWin, pausex-(pauseImage->width/2), pausey-(pauseImage->height/2), 0, pauseImage, W_White);
++    W_DrawImage(baseWin, pausex-(pauseImage->width/2), PX(pausey-(pauseImage->height/2)), 0, pauseImage, W_White);
+ }
+ 
+ void 
+@@ -88,15 +92,15 @@
+     int top = 270;
+ 
+     center_text("         Keyboard controls           ", top, W_Red);
+-    center_text("  left/right arrow   move            ", top+10, W_Yellow);
+-    center_text("  space bar          fire            ", top+20, W_Yellow);
++    center_text("  j / l              move            ", top+10, W_Yellow);
++    center_text("  f                  fire            ", top+20, W_Yellow);
+     center_text("  p                  pause           ", top+30, W_Cyan);
+     center_text("  q                  end game        ", top+40, W_Cyan);
+     center_text("  Q                  quick quit      ", top+50, W_Cyan);
+     center_text("  k                  keyboard control", top+60, W_Cyan);
+     center_text("  m                  mouse control   ", top+70, W_Cyan);
+ #ifndef ORIGINAL_XGALAGA
+-    center_text("  x                  toggle shields  ", top+80, W_Cyan);
++    center_text("  d                  shield          ", top+80, W_Cyan);
+ #endif
+ #ifdef SOUND
+     center_text("  s                  toggle sound    ", top+90, W_Cyan);
+@@ -262,13 +266,6 @@
+ 	break;
+     }
+ 
+-#ifdef __linux__
+-    if (js_device)
+-	    center_text("Press k for keyboard or joystick control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
+-    else /* no joystick, so use message below */
+-#endif
+-    center_text("Press k for keyboard control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
+-    center_text("Or q to quit", WINHEIGHT - W_Textheight, W_Yellow);
+ 
+     undo_credits();     // erase with painting black
+     pagetimer--;
+@@ -286,18 +283,30 @@
+ 	title_page++;
+ 	if (title_page > 1)
+ 	  title_page = 0;
+-	pagetimer = 299;
++	pagetimer = 598;   /* was 299 @ 30Hz: doubled ticks, same page time */
+     }
+     show_credits();     // write text
++    /* Bottom hint text is drawn last: the scrolling credits and their
++     * bottom clearance band (show_credits()) reach into this region in the
++     * web build (where W_Textheight is the full 13 font rows), which would
++     * otherwise erase part of it every frame. */
++#ifdef __linux__
++    if (js_device)
++	    center_text("Press k for keyboard or joystick control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
++    else /* no joystick, so use message below */
++#endif
++    center_text("Press k for keyboard control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
++    center_text("Or q to quit", WINHEIGHT - W_Textheight, W_Yellow);
+ }
+ 
++
+ void init_titles()
+ {
+     titleImage = getImage(I_TITLE);
+     pauseImage = getImage(I_PAUSE);
+     pausex = WINWIDTH/2;
+     pausey = WINHEIGHT/2;
+-    pauseyspeed = 3;
++    pauseyspeed = 1.5f;   /* was 3 px @ 30Hz: halved per tick */
+     read_credits();
+ }
+ 

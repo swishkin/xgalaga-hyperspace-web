@@ -11,7 +11,7 @@ NAMES = ["explode", "firetorp", "shield", "torphit",
          "explode_big", "ddloo", "warp", "smart"]
 
 def main():
-    srcdir = os.path.join(os.path.dirname(__file__), "..", "sounds")
+    srcdir = os.path.join(os.path.dirname(__file__) or ".", "xgalaga-2.1.1.0", "sounds")
     blobs = []
     for name in NAMES:
         with open(os.path.join(srcdir, name + ".raw"), "rb") as f:

@@ -1,10 +1,7 @@
 # Keep the build context tiny: only the deployed artifacts are in the image.
-.git
-xgalaga-2.1.1.0/*
-!xgalaga-2.1.1.0/web
-xgalaga-2.1.1.0/web/*
-!xgalaga-2.1.1.0/web/leaderboard.py
-!xgalaga-2.1.1.0/web/index.html
-!xgalaga-2.1.1.0/web/xgalaga.js
-!xgalaga-2.1.1.0/web/favicon.ico
-!xgalaga-2.1.1.0/web/icon.png
+*
+!leaderboard.py
+!index.html
+!xgalaga.js
+!favicon.ico
+!icon.png

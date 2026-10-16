@@ -8,9 +8,6 @@
 #ifdef HAVE_FCNTL_H
 # include <fcntl.h>
 #endif
-#ifdef HAVE_UNISTD_H
-# include <unistd.h>
-#endif
 #include "math.h"
 #include "Wlib.h"
 #include "defs.h"
@@ -20,19 +17,18 @@
 #include "proto.h"
 
 /* for scrolling credits */
-const int LINESIZE= 70;
-const int VISIBLELINES=7;
-const int SPEEDFACTOR=10;  /* was 5 @ 30Hz: doubled ticks for same scroll rate */
+const LINESIZE= 70;
+const VISIBLELINES=7;
+const SPEEDFACTOR=5;
 char *gchLBuf;
 int giCreditLines=0, giActCreditLine=0;
 
 W_Image *pauseImage, *titleImage;
-int pausex;
-float pausey, pauseyspeed=1;
+int pausex, pausey, pauseyspeed=1;
 
 void undo_pause()
 {
-    W_CacheClearArea(baseWin, pausex-(pauseImage->width/2), PX(pausey-(pauseImage->height/2)), 
+    W_CacheClearArea(baseWin, pausex-(pauseImage->width/2), pausey-(pauseImage->height/2), 
 		     pauseImage->width, pauseImage->height);
 }
 
@@ -42,7 +38,7 @@ void do_pause()
 	pauseyspeed = -pauseyspeed;
     pausey+=pauseyspeed;
 
-    W_DrawImage(baseWin, pausex-(pauseImage->width/2), PX(pausey-(pauseImage->height/2)), 0, pauseImage, W_White);
+    W_DrawImage(baseWin, pausex-(pauseImage->width/2), pausey-(pauseImage->height/2), 0, pauseImage, W_White);
 }
 
 void 
@@ -92,15 +88,15 @@ static void show_help()
     int top = 270;
 
     center_text("         Keyboard controls           ", top, W_Red);
-    center_text("  j / l              move            ", top+10, W_Yellow);
-    center_text("  f                  fire            ", top+20, W_Yellow);
+    center_text("  left/right arrow   move            ", top+10, W_Yellow);
+    center_text("  space bar          fire            ", top+20, W_Yellow);
     center_text("  p                  pause           ", top+30, W_Cyan);
     center_text("  q                  end game        ", top+40, W_Cyan);
     center_text("  Q                  quick quit      ", top+50, W_Cyan);
     center_text("  k                  keyboard control", top+60, W_Cyan);
     center_text("  m                  mouse control   ", top+70, W_Cyan);
 #ifndef ORIGINAL_XGALAGA
-    center_text("  d                  shield          ", top+80, W_Cyan);
+    center_text("  x                  toggle shields  ", top+80, W_Cyan);
 #endif
 #ifdef SOUND
     center_text("  s                  toggle sound    ", top+90, W_Cyan);
@@ -266,6 +262,13 @@ void do_title()
 	break;
     }
 
+#ifdef __linux__
+    if (js_device)
+	    center_text("Press k for keyboard or joystick control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
+    else /* no joystick, so use message below */
+#endif
+    center_text("Press k for keyboard control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
+    center_text("Or q to quit", WINHEIGHT - W_Textheight, W_Yellow);
 
     undo_credits();     // erase with painting black
     pagetimer--;
@@ -283,22 +286,10 @@ void do_title()
 	title_page++;
 	if (title_page > 1)
 	  title_page = 0;
-	pagetimer = 598;   /* was 299 @ 30Hz: doubled ticks, same page time */
+	pagetimer = 299;
     }
     show_credits();     // write text
-    /* Bottom hint text is drawn last: the scrolling credits and their
-     * bottom clearance band (show_credits()) reach into this region in the
-     * web build (where W_Textheight is the full 13 font rows), which would
-     * otherwise erase part of it every frame. */
-#ifdef __linux__
-    if (js_device)
-	    center_text("Press k for keyboard or joystick control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
-    else /* no joystick, so use message below */
-#endif
-    center_text("Press k for keyboard control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
-    center_text("Or q to quit", WINHEIGHT - W_Textheight, W_Yellow);
 }
-
 
 void init_titles()
 {
@@ -306,7 +297,7 @@ void init_titles()
     pauseImage = getImage(I_PAUSE);
     pausex = WINWIDTH/2;
     pausey = WINHEIGHT/2;
-    pauseyspeed = 1.5f;   /* was 3 px @ 30Hz: halved per tick */
+    pauseyspeed = 3;
     read_credits();
 }
 
