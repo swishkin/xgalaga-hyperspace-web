@@ -632,8 +632,8 @@ static void do_aliens()
             }
         }
     }
-    if(livecount == 0 && !paused) {
-        if (!(counter & 1)) starspeed++;  /* every other 60Hz tick = 30Hz rate */
+    if(livecount == 0 && !paused && !(counter & 1)) {  /* warp state machine at 30Hz: the increment and the starspeed==1 level-start check must run on the same tick, as in the original 30Hz loop */
+        starspeed++;
 #ifdef SOUND
         if(starspeed == 2)
             play_sound(SND_WARP);

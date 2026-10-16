@@ -175,4 +175,9 @@ interpretation:
   without the retiming would run the *game* faster, and rendering more
   frames per tick would only repeat the same state, since the original
   does no interpolation between steps.
+  The level-transition (warp) state machine is gated the same way, and
+  both its `starspeed` increment and its `starspeed == 1` level-start
+  check run on the same tick; gating only the increment left the check
+  firing on the other ticks, which intermittently skipped the hyperspace
+  jump (the next wave started immediately).
 
