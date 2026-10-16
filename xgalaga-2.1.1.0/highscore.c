@@ -366,7 +366,8 @@ int check_score(int score)
 
 void show_scores()
 {
-    int i;
+    int i, n, place;
+    struct high_score *board;
     char buf[60];
     W_Color color;
 
@@ -374,30 +375,30 @@ void show_scores()
 
     color = W_DarkGrey;
 
-    
 #ifndef NO_GLOBAL_SCORES
-    center_text("Global high scores", 90, W_Yellow);
+    /* Web build: the board is the shared online leaderboard; the current
+     * user's score is highlighted directly on it (thisplace, set by
+     * add_score()). */
+    board = global_scores;
+    n = NUM_GLOBAL_SCORES;
+    place = thisplace;
+#else
+    /* Native build: there is no shared board, so the per-user board is
+     * the board (highlighted via my_thisplace). */
+    board = my_scores;
+    n = NUM_MY_SCORES;
+    place = my_thisplace;
+#endif
+
+    center_text("High scores", 90, W_Yellow);
     sprintf(buf, "Rank  Name                      Score   Level");
     center_text(buf, 100, W_Yellow);
     W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 111,
 	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 111, W_Red);
-    for(i=0;i<NUM_GLOBAL_SCORES;i++) {
-	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1, 
-		global_scores[i].name, global_scores[i].score,global_scores[i].level);
-	center_text(buf, 112+i*W_Textheight, (i==thisplace ? color : W_Grey));
-    }
-#endif
-    
-    center_text("Your high scores", 112+NUM_GLOBAL_SCORES*W_Textheight, W_Yellow);
-    sprintf(buf, "Rank  Name                      Score   Level");
-    center_text(buf, 112+(NUM_GLOBAL_SCORES+1)*W_Textheight, W_Yellow);
-    W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 123+(NUM_GLOBAL_SCORES+1)*W_Textheight,
-	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 123+(NUM_GLOBAL_SCORES+1)*W_Textheight, W_Red);
-    for(i=0;i<NUM_MY_SCORES;i++) {
-	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1, 
-		my_scores[i].name, my_scores[i].score,my_scores[i].level);
-	center_text(buf, 124+(NUM_GLOBAL_SCORES+1)*W_Textheight + i*W_Textheight, 
-		    (i==my_thisplace ? color : W_Grey));
+    for(i=0;i<n;i++) {
+	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1,
+		board[i].name, board[i].score, board[i].level);
+	center_text(buf, 112+i*W_Textheight, (i==place ? color : W_Grey));
     }
 }
 
