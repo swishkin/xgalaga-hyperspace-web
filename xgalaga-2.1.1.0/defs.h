@@ -15,7 +15,7 @@
 # define NO_PRIZE_WHILE_DEAD
 #endif
 
-#define MAXTORPS 10
+#define MAXTORPS 15
 #define MINTORPS 3
 #define TORPSPEED 6      /* was 12 @ 30Hz: halved for 60Hz, same px/s */
 

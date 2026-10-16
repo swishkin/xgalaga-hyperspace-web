@@ -151,6 +151,23 @@
                 pushEvent(4, keyUpCode(e), 0, 0, 0);
             });
 
+            /* Browsers stop delivering keyup once the page loses focus, so
+             * without this the C-side key state (static `keys` in do_player)
+             * keeps a movement key held: e.g. holding J and alt-tabbing
+             * away, then back, leaves the ship drifting left.  Synthesize
+             * releases for the four game-control keys (ctrl-b, ctrl-f,
+             * space, 'x'). */
+            function releaseHeldKeys() {
+                var codes = [226, 230, 32, 120];
+                for (var i = 0; i < codes.length; i++)
+                    pushEvent(4, codes[i], 0, 0, 0);
+            }
+            window.addEventListener('blur', releaseHeldKeys);
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden)
+                    releaseHeldKeys();
+            });
+
             c.addEventListener('mousemove', function (e) {
                 var p = X.toGame(e);
                 mouse.x = p.x;

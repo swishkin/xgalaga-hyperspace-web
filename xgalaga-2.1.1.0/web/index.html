@@ -21,6 +21,9 @@
     justify-content: center;
   }
   #xgalcanvas {
+    /* 1px grey frame: keeps the game screen's edges identifiable against
+     * the black browser window. */
+    border: 1px solid #808080;
     /* sized in whole pixels by the fitCanvas() script below */
     image-rendering: pixelated;
     cursor: crosshair;
@@ -47,7 +50,9 @@
    * window is smaller than the 468x596 game screen. */
   function fitCanvas() {
     var c = document.getElementById("xgalcanvas");
-    var s = Math.min(window.innerWidth / c.width, window.innerHeight / c.height);
+    var bw = 2; /* 1px border on each side */
+    var s = Math.min((window.innerWidth - bw) / c.width,
+                     (window.innerHeight - bw) / c.height);
     var whole = Math.floor(s);
     s = whole >= 1 ? whole : s;
     c.style.width = Math.round(c.width * s) + "px";

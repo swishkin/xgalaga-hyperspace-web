@@ -266,13 +266,6 @@ void do_title()
 	break;
     }
 
-#ifdef __linux__
-    if (js_device)
-	    center_text("Press k for keyboard or joystick control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
-    else /* no joystick, so use message below */
-#endif
-    center_text("Press k for keyboard control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
-    center_text("Or q to quit", WINHEIGHT - W_Textheight, W_Yellow);
 
     undo_credits();     // erase with painting black
     pagetimer--;
@@ -293,7 +286,19 @@ void do_title()
 	pagetimer = 598;   /* was 299 @ 30Hz: doubled ticks, same page time */
     }
     show_credits();     // write text
+    /* Bottom hint text is drawn last: the scrolling credits and their
+     * bottom clearance band (show_credits()) reach into this region in the
+     * web build (where W_Textheight is the full 13 font rows), which would
+     * otherwise erase part of it every frame. */
+#ifdef __linux__
+    if (js_device)
+	    center_text("Press k for keyboard or joystick control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
+    else /* no joystick, so use message below */
+#endif
+    center_text("Press k for keyboard control, m for mouse", WINHEIGHT - 2*W_Textheight, W_Yellow);
+    center_text("Or q to quit", WINHEIGHT - W_Textheight, W_Yellow);
 }
+
 
 void init_titles()
 {

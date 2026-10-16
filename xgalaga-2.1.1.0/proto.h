@@ -9,6 +9,8 @@ int cmpfilenames(const void *left, const void *right);
 void loadImageByFilename(char *filename);
 void loadAllImages(void);
 /* data.c */
+/* Minimum torps per weapon at the given level (rises every 15 levels). */
+int weapon_mintorps(int weapon, int level);
 /* paths.c */
 void path_dir(int path, int pos, int *dir, int *steer);
 void enter_path_dir(int path, int pos, int *dir, int *steer);

@@ -146,8 +146,11 @@ void do_prizes()
 		    maxtorps++;
 		else {
 		    weapon = DOUBLESHOT;
-		    if(maxtorps < 4)
-			maxtorps = 4;
+		    {
+			int mn = weapon_mintorps(DOUBLESHOT, level);
+			if (maxtorps < mn)
+			    maxtorps = mn;
+		    }
 		}
 		break;
 	      case PR_TRIP:
@@ -155,8 +158,11 @@ void do_prizes()
 		    maxtorps++;
 		else {
 		    weapon = TRIPLESHOT;
-		    if(maxtorps < 6)
-			maxtorps=6;
+		    {
+			int mn = weapon_mintorps(TRIPLESHOT, level);
+			if (maxtorps < mn)
+			    maxtorps = mn;
+		    }
 		}
 		break;
 	      case PR_SPEED:
@@ -169,9 +175,12 @@ void do_prizes()
                     maxtorps++;
                 else {
                     weapon = SPREADSHOT;
-                    if (maxtorps < 5)
-                       maxtorps = 5;
-		}
+                    {
+			int mn = weapon_mintorps(SPREADSHOT, level);
+			if (maxtorps < mn)
+			    maxtorps = mn;
+                    }
+                }
 		break;
 #endif /* ENABLE_SPREAD_SHOT */
 #ifdef ENABLE_MACHINE_GUN
@@ -180,8 +189,11 @@ void do_prizes()
                    maxtorps++;
                 else {
                    weapon = MACHINEGUN;
-                   if (maxtorps < 3)
-                      maxtorps = 3;
+                   {
+			int mn = weapon_mintorps(MACHINEGUN, level);
+			if (maxtorps < mn)
+			    maxtorps = mn;
+                   }
                 }
                 break;
 #endif /* ENABLE_MACHINE_GUN */
@@ -248,7 +260,7 @@ void do_prizes()
 		break;
 	      case PR_LEMON:
 		gotlemon = 1;
-		maxtorps = MINTORPS;
+		maxtorps = weapon_mintorps(0, level);
 		weapon = 0;
 		movespeed = MINSPEED;
 		break;

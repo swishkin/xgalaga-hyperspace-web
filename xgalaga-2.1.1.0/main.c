@@ -63,6 +63,24 @@ static float moves[16][2] = {
     {-1,-2}
 };
 
+/* Per-tick move that reproduces the original 30Hz integer arithmetic
+ * exactly: the original moved m + metaLevel*m/2 px per 30Hz frame
+ * (integer division: on the 3px diagonal that is 3+1=4 at metaLevel 1),
+ * so the same trajectory at 60Hz is (that) / 2 px per tick.  The earlier
+ * float halving (moves[] + metaLevel*moves[]/2) made the
+ * odd-component directions ~25% too fast, which widened the level 8
+ * slither (sse/ssw segments) compared with the original. */
+static float enter_speed(int dir, int axis)
+{
+    static const int m30[16][2] = {
+        {0,-4},{1,-4},{3,-3},{4,-1},{4,0},{4,1},{3,3},{1,4},
+        {0,4},{-1,4},{-3,3},{-4,1},{-4,0},{-4,-1},{-3,-3},{-1,-4}
+    };
+    int m = m30[dir][axis];
+
+    return (m + (metaLevel * m) / 2) / 2.0f;
+}
+
 void
 xgal_exit(int v)
 {
@@ -390,8 +408,8 @@ static void do_enter(int i)
     }
 
     if(aliens[i].path >= 0) {
-        aliens[i].x += moves[aliens[i].dir][0] + metaLevel * moves[aliens[i].dir][0]/2;
-        aliens[i].y += moves[aliens[i].dir][1] + metaLevel * moves[aliens[i].dir][1]/2;
+        aliens[i].x += enter_speed(aliens[i].dir, 0);
+        aliens[i].y += enter_speed(aliens[i].dir, 1);
     
         aliens[i].steer--;
         if(aliens[i].steer <= 0) {
@@ -465,8 +483,8 @@ static void do_enter(int i)
 		}
 	    }
         }
-        aliens[i].x += moves[aliens[i].dir][0] + metaLevel * moves[aliens[i].dir][0]/2;
-        aliens[i].y += moves[aliens[i].dir][1] + metaLevel * moves[aliens[i].dir][1]/2;
+        aliens[i].x += enter_speed(aliens[i].dir, 0);
+        aliens[i].y += enter_speed(aliens[i].dir, 1);
     }
 }
 
@@ -889,7 +907,11 @@ int mx, my, but;
                     if(mouseControl)
                         W_GrabPointer(baseWin);
                     gameOver = 0;
-                    maxtorps = MINTORPS;
+                    keys = 0;   /* no stale key state: a movement key
+                                 * released while the game-over screen was
+                                 * up is swallowed there (no W_EV_KEY_OFF
+                                 * handling), and 'keys' persists */
+                    maxtorps = weapon_mintorps(SINGLESHOT, startLevel);
                     weapon = 0;
                     movespeed = MINSPEED;
                     ships=2;
@@ -1048,7 +1070,7 @@ int mx, my, but;
             case 256+'t':       //372:
                 maxtorps++;
                 if(maxtorps > MAXTORPS)
-                    maxtorps = MINTORPS;
+                    maxtorps = weapon_mintorps(weapon, level);
                 break;
 #endif /* IM_A_BIG_FAT_CHEATER */
             case '\r'+256:
@@ -1106,42 +1128,11 @@ int mx, my, but;
 #ifdef DISABLE_RESET_ON_DEATH
                     ships--;
                     maxtorps--;
-                    if (maxtorps < MINTORPS)
-                    	maxtorps = MINTORPS;
-                    switch (weapon)
                     {
-                    	case SINGLESHOT:
-                    		if (maxtorps < 3)
-                    		{
-                    			maxtorps = 3;
-                    			weapon = SINGLESHOT;
-                    		}
-                    		break;
-                    	case DOUBLESHOT:
-	                    	if (maxtorps < 4)
-                    		{
-                    			maxtorps = 4;
-                    		}
-        					break;
-                   		case SPREADSHOT:
-                    		if (maxtorps < 5)
-                    		{
-                    			maxtorps = 5;
-                    		}
-                    		break;
-						case TRIPLESHOT:
-							if (maxtorps < 6)
-                    		{
-                    			maxtorps = 6;
-                    		}
-                    		break;
-                    	case MACHINEGUN:
-                    		if (maxtorps < 3)
-                    		{
-                    			maxtorps = 3;
-                    		}
-                    		break;
-		}
+                        int mn = weapon_mintorps(weapon, level);
+                        if (maxtorps < mn)
+                            maxtorps = mn;
+                    }
 #else
                     ships--;
                     maxtorps = MINTORPS;

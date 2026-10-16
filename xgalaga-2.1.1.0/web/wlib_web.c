@@ -31,6 +31,7 @@
 
 #include "Wlib.h"
 #include "fontdata.h"
+#include "bigfontdata.h"
 
 /* ---- globals normally provided by libsprite/data.c ---------------------- */
 
@@ -48,7 +49,7 @@ W_Color W_White = 0, W_Black = 1, W_Red = 2, W_Green = 3, W_Yellow = 4,
         W_Cyan = 5, W_DarkGrey = 6, W_Grey = 7;
 
 int W_Textwidth = 6, W_Textheight = FONT_ROWS;
-int W_BigTextwidth = 6, W_BigTextheight = FONT_ROWS;
+int W_BigTextwidth = BIGFONT_MAXADV, W_BigTextheight = BIGFONT_HEIGHT;
 
 /* TrueColor values from libsprite/data.c colortable (XParseColor names):
  * white, black, red, green, yellow, cyan, "#ffff00" (dark grey is really
@@ -207,9 +208,44 @@ static void draw_glyph(webwin_t *win, int ax, int ay, unsigned char ch, unsigned
     }
 }
 
+/* Proportional big font (Helvetica Bold 34 bitmap table, bigfontdata.h):
+ * the original X server advances the pen by each glyph's own advance
+ * (XDrawString/XTextWidth), so "LEVEL N" matches the original's spacing.
+ * The caller's y is the cell top (baseline - BIGFONT_ASCENT), as with the
+ * core font. */
+static void draw_text_big(webwin_t *win, int x, int y, W_Color color, char *str, int len)
+{
+    int pen = 0;
+    unsigned int rgb = palette[color];
+
+    for (int i = 0; i < len; i++) {
+        unsigned char ch = (unsigned char)str[i];
+        if ((int)ch < 32 || (int)ch >= 127) {
+            pen += W_Textwidth;
+            continue;
+        }
+        const bigglyph_t *g = &bigfont_glyph[ch - 32];
+        if (g->w) {
+            for (int r = 0; r < (int)g->h; r++) {
+                const unsigned char *row =
+                    &bigfont_rows[g->rowofs + r * ((g->w + 7) / 8)];
+                for (int c = 0; c < (int)g->w; c++) {
+                    if (!(row[c >> 3] & (0x80u >> (c & 7))))
+                        continue;
+                    putpx(win, win->x + x + pen + c, win->y + y + (int)g->dy + r, rgb);
+                }
+            }
+        }
+        pen += g->adv;
+    }
+}
+
 static void draw_text(webwin_t *win, int x, int y, W_Color color, char *str, int len, W_Font font)
 {
-    (void)font; /* the big font falls back to the same core font (init.c) */
+    if (font == W_BigFont) {
+        draw_text_big(win, x, y, color, str, len);
+        return;
+    }
     /* X11 draws at the baseline (y + ascent); the line top is the caller's
      * y, so glyph row r lands on line y + r (row FONT_BASELINE = baseline). */
     for (int i = 0; i < len; i++)
@@ -571,7 +607,19 @@ void W_WriteText(W_Window window, int x, int y, W_Color color, char *str, int le
 
 int W_StringWidth(char string[], W_Font font)
 {
-    return (int)strlen(string) * (font == W_BigFont ? W_BigTextwidth : W_Textwidth);
+    if (font == W_BigFont) {
+        int w = 0;
+        for (char *p = string; *p; p++) {
+            unsigned char ch = (unsigned char)*p;
+            if ((int)ch < 32 || (int)ch >= 127) {
+                w += W_Textwidth;
+                continue;
+            }
+            w += bigfont_glyph[ch - 32].adv;
+        }
+        return w;
+    }
+    return (int)strlen(string) * W_Textwidth;
 }
 
 void W_SetImageDir(char *dir)
