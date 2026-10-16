@@ -6,7 +6,9 @@
 #
 # The pristine 2.1.1.0 source tree in xgalaga-2.1.1.0/ is never modified:
 # the build stages a throwaway copy and applies patches/0001-web-port.patch
-# (the 60 Hz retime, MINTORPS floors, and web input fixes) to that copy.
+# (60 Hz retime, MINTORPS floors, web input fixes) and
+# patches/0002-debug-webui.patch (in-game equipment indicators, debug panel
+# C bridge) to that copy.
 #
 # Requires: emsdk on $HOME/emsdk, python3, and a working `patch`.
 # The bitmap font (fontdata.h) is static: it is the classic X 6x13 core
@@ -21,9 +23,10 @@ GAME=xgalaga-2.1.1.0
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-# Stage a throwaway copy of the pristine tree and apply the web-port patch.
+# Stage a throwaway copy of the pristine tree and apply the web patches.
 cp -r "$GAME" "$STAGE/$GAME"
-( cd "$STAGE" && patch -p1 -s < "$REPO/patches/0001-web-port.patch" )
+( cd "$STAGE" && patch -p1 -s < "$REPO/patches/0001-web-port.patch" && \
+  patch -p1 -s < "$REPO/patches/0002-debug-webui.patch" )
 
 # Generated data (kept in the tree; regenerated on each build)
 python3 mksounddata.py sounddata.h
@@ -53,7 +56,8 @@ emcc -O2 -UORIGINAL_XGALAGA \
     -s EXIT_RUNTIME=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s SINGLE_FILE=1 \
-    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name'] \
+    -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] \
+    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name','_xgal_web_debug_state','_xgal_web_debug_set_start_level','_xgal_web_debug_start_game','_xgal_web_debug_set_weapon','_xgal_web_debug_set_maxtorps','_xgal_web_debug_set_ships','_xgal_web_debug_set_shields','_xgal_web_debug_set_speed','_xgal_web_debug_set_paused','_malloc'] \
     -o xgalaga.js
 # Inline webglue.js (input bridge) at the front of the bundle: the deliverable
 # is a single file, and one script tag avoids a browser cache desync between

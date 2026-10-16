@@ -1,0 +1,385 @@
+diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
+--- xgal-p1/xgalaga-2.1.1.0/main.c	2026-10-16 11:39:56.254844858 -0500
++++ xgal-p2/xgalaga-2.1.1.0/main.c	2026-10-16 13:03:14.488410907 -0500
+@@ -22,6 +22,9 @@
+ #include "paths.h"
+ #include "proto.h"
+ #include "sound.h"
++#ifndef ORIGINAL_XGALAGA
++#include "hudicons.h"
++#endif /* ORIGINAL_XGALAGA */
+ 
+ struct torp torps[MAXTORPS];
+ struct star stars[NUMSTARS];
+@@ -33,6 +36,7 @@
+ static int starspeed = 1;
+ static int attacking = 0, maxattacking, entering=0;
+ static int maxetorps = 5, numetorps=0;
++static int plkeys = 0;
+ static int plflash = 100;   /* was 50 @ 30Hz: doubled ticks */
+ static int fullscreen = 0;
+ #ifndef ORIGINAL_XGALAGA
+@@ -185,6 +189,31 @@
+     }
+ }
+ 
++/* HUD icon renderer: xgal_icon slots map to Wlib palette entries. */
++static void draw_hud_icon(win, x, y, ic)
++W_Window win;
++int x, y;
++const struct xgal_icon *ic;
++{
++    static W_Color slotcolor[5];
++    static int inited = 0;
++    int i;
++
++    if(!inited) {
++	slotcolor[0] = W_Black;
++	slotcolor[1] = W_White;
++	slotcolor[2] = W_Grey;
++	slotcolor[3] = W_Yellow;
++	slotcolor[4] = W_Red;
++	inited = 1;
++    }
++    for(i = 0; i < ic->h * ic->w; i++) {
++	if(ic->idx[i] != XGAL_ICON_NONE)
++	    W_DrawPoint(win, x + i % ic->w, y + i / ic->w,
++			slotcolor[ic->idx[i]]);
++    }
++}
++
+ static void do_stars()
+ {
+     int i;
+@@ -216,6 +245,56 @@
+             }
+             W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), stars[i].color);
+         }
++#ifndef ORIGINAL_XGALAGA
++	/* Equipment indicators, immediately left of the shield block:
++	 * [weapon icon] [maxtorps] [speed icon xN].  The shield block spans
++	 * WINWIDTH-20*shieldcount..WINWIDTH, so the group's right edge
++	 * follows the shield count (0 shields -> flush with the right
++	 * edge).  The strip is cleared first: both the bar and the group
++	 * shift as the count changes, and the persistent framebuffer would
++	 * otherwise keep stale pixels. */
++	{
++	    int shieldcount = 0;
++	    int total_shields;
++	    int nspeed = (int)(movespeed - MINSPEED + 0.5f);
++	    int maxnspeed = (int)(MAXSPEED - MINSPEED + 0.5f);
++	    int right, x, i;
++
++	    W_ClearArea(baseWin, WINWIDTH - 170, 0, 170, 20);
++	    if((plshield > 0) || (shieldsleft > 0)) {
++		total_shields = (plshield + shieldsleft) * 19 / SHIELDTIME + 1;
++		while(total_shields > 0) {
++		    shieldcount++;
++		    total_shields -= 19;
++		}
++	    }
++	    if(nspeed > maxnspeed)
++		nspeed = maxnspeed;
++	    right = WINWIDTH - 20 * shieldcount;
++	    {
++		char buf[8];
++		int tw, total;
++
++		sprintf(buf, "%d", maxtorps);
++		tw = W_StringWidth(buf, W_RegularFont);
++		total = xgal_icon_weapon[weapon].w + 2 + tw + 2;
++		if(nspeed > 0)
++		    /* trailing gap not drawn */
++		    total += nspeed * (xgal_icon_speed.w + 1) - 1;
++		x = right - total;
++		draw_hud_icon(baseWin, x, (20 - xgal_icon_weapon[weapon].h) / 2,
++			      &xgal_icon_weapon[weapon]);
++		x += xgal_icon_weapon[weapon].w + 2;
++		W_MaskText(baseWin, x, (20 - W_Textheight) / 2, W_White,
++			    buf, strlen(buf), W_RegularFont);
++		x += tw + 2;
++		for(i = 0; i < nspeed; i++)
++		    draw_hud_icon(baseWin, x + i * (xgal_icon_speed.w + 1),
++				  (20 - xgal_icon_speed.h) / 2, &xgal_icon_speed);
++	    }
++	}
++#endif /* ORIGINAL_XGALAGA */
++
+ #ifdef SHOW_SHIELD_BAR
+ 	    if ((plshield > 0) || (shieldsleft > 0)) { 
+ 		int shieldcount = 0;
+@@ -235,6 +314,8 @@
+ #endif /* SHOW_SHIELD_BAR */
+ 
+ 
++
++
+     }
+     if(starspeed != 1) {
+         char buf[20];
+@@ -843,6 +924,35 @@
+                      playerShip->width, h);
+ }
+ 
++/* Start a new game at startLevel (the title -> game transition).  Shared by
++ * the click start path and the web debug panel. */
++static void start_new_game()
++{
++    gameOver = 0;
++    plkeys = 0;   /* no stale key state: a movement key
++                   * released while the game-over screen was
++                   * up is swallowed there (no W_EV_KEY_OFF
++                   * handling), and 'plkeys' persists */
++    maxtorps = weapon_mintorps(SINGLESHOT, startLevel);
++    weapon = 0;
++    movespeed = MINSPEED;
++    ships = 2;
++#ifdef ACTIVATED_SHIELD
++    shieldsleft = STARTSHIELDS;
++    shieldon = 0;
++#else
++    shieldsleft = 0;
++#endif
++    level = startLevel;
++    init_aliens(level);
++    gotlemon = 0;
++    pldead = 0;
++    score = 0;
++    nextBonus = 20000;
++    plx = WINWIDTH/2;
++    W_ClearWindow(baseWin);
++}
++
+ static void do_player(mx, my, but)
+ int mx, my, but;
+ {
+@@ -851,7 +961,6 @@
+     static int shotside = 0;
+ #endif
+     W_Event wev;
+-    static int keys = 0;
+ 
+     if(gameOver) {
+         while(W_EventsPending()) {
+@@ -906,29 +1015,7 @@
+                 if(!getting_name) {
+                     if(mouseControl)
+                         W_GrabPointer(baseWin);
+-                    gameOver = 0;
+-                    keys = 0;   /* no stale key state: a movement key
+-                                 * released while the game-over screen was
+-                                 * up is swallowed there (no W_EV_KEY_OFF
+-                                 * handling), and 'keys' persists */
+-                    maxtorps = weapon_mintorps(SINGLESHOT, startLevel);
+-                    weapon = 0;
+-                    movespeed = MINSPEED;
+-                    ships=2;
+-#ifdef ACTIVATED_SHIELD
+-		    shieldsleft = STARTSHIELDS;
+-		    shieldon = 0;
+-#else
+-		    shieldsleft = 0;
+-#endif
+-                    level=startLevel;  /* change made here */
+-                    init_aliens(level);
+-                    gotlemon = 0;
+-                    pldead = 0;
+-                    score = 0;
+-                    nextBonus = 20000;
+-                    plx = WINWIDTH/2;
+-                    W_ClearWindow(baseWin);
++                    start_new_game();
+                 }
+                 break;
+             case W_EV_EXPOSE:
+@@ -950,14 +1037,14 @@
+         case W_EV_KEY_OFF:
+             switch(wev.key) {
+             case 'f'+128:
+-                keys &= ~(RIGHTKEY);
++                plkeys &= ~(RIGHTKEY);
+                 break;
+             case 'b'+128:
+-                keys &= ~(LEFTKEY);
++                plkeys &= ~(LEFTKEY);
+                 break;
+             case ' ':
+             case 256+' ':       //288:
+-                keys &= ~(FIREKEY);
++                plkeys &= ~(FIREKEY);
+                 break;
+ #ifdef ACTIVATED_SHIELD
+ 	    case 'x':
+@@ -972,14 +1059,14 @@
+         case W_EV_KEY:
+             switch(wev.key) {
+             case 'f'+128:
+-                keys |= RIGHTKEY;
++                plkeys |= RIGHTKEY;
+                 break;
+             case 'b'+128:
+-                keys |= LEFTKEY;
++                plkeys |= LEFTKEY;
+                 break;
+             case ' ':
+             case 256+' ':       //288:
+-                keys |= FIREKEY;
++                plkeys |= FIREKEY;
+                 break;
+             case 'k':
+             case 256+'k':       //363:
+@@ -1097,14 +1184,14 @@
+ 
+         if((!mouseControl && ! js_device) ||
+ 	   (js_device && mx == plx && but == 0)) {
+-            if(keys & LEFTKEY)
++            if(plkeys & LEFTKEY)
+                 mx = 0;
+-            else if(keys & RIGHTKEY)
++            else if(plkeys & RIGHTKEY)
+                 mx = WINWIDTH;
+             else
+                 mx = plx;
+         
+-            if(keys & FIREKEY)
++            if(plkeys & FIREKEY)
+                 but = W_LBUTTON;
+             else
+                 but = 0;
+@@ -1260,7 +1347,136 @@
+     }
+ }
+ 
++#ifndef ORIGINAL_XGALAGA
++/* --- web debug bridge ----------------------------------------------------
++ * Exported for the in-browser debug panel (debug_webui.js), shown when the
++ * page sets window.XGAL_DEBUG_WEBUI or the URL contains ?debug.  The panel
++ * and this code share the single emscripten thread (ASYNCIFY yields the
++ * game loop in the frame sleep), so plain global access is race-free; the
++ * setters may run at any time, paused or not.
++ *
++ * xgal_web_debug_state() slot map (int array, 18 slots):
++ *   0 level (1-based)    1 metaLevel        2 score
++ *   3 ships              4 maxtorps         5 numtorps (player torps in flight)
++ *   6 numetorps          7 maxetorps        8 movespeed*2
++ *   9 shield ticks (plshield+shieldsleft)   10 weapon
++ *   11 paused            12 gameOver        13 starspeed
++ *   14 livecount         15 gotlemon        16 startLevel
++ *   17 counter (sim tick counter: sim rate = delta / elapsed)
++ */
++void xgal_web_debug_state(out)
++int *out;
++{
++    out[0] = level;
++    out[1] = metaLevel;
++    out[2] = score;
++    out[3] = ships;
++    out[4] = maxtorps;
++    out[5] = numtorps;
++    out[6] = numetorps;
++    out[7] = maxetorps;
++    out[8] = (int)(movespeed * 2.0f);
++    out[9] = plshield + shieldsleft;
++    out[10] = weapon;
++    out[11] = paused;
++    out[12] = gameOver;
++    out[13] = starspeed;
++    out[14] = livecount;
++    out[15] = gotlemon;
++    out[16] = startLevel;
++    out[17] = counter;
++}
++
++void xgal_web_debug_set_start_level(n)
++int n;
++{
++    if(n < 1)
++	n = 1;
++    if(n > 9999)
++	n = 9999;
++    startLevel = n;
++}
++
++/* Start a new game immediately at level n (n <= 0: use startLevel). */
++void xgal_web_debug_start_game(n)
++int n;
++{
++    if(n >= 1)
++	xgal_web_debug_set_start_level(n);
++    start_new_game();
++}
++
++void xgal_web_debug_set_weapon(w)
++int w;
++{
++    int mn;
++
++    if(w < 0 || w >= NUMWEAPONS)
++	return;
++    if(w != weapon) {
++	weapon = w;
++	mn = weapon_mintorps(w, level);
++	if(maxtorps < mn)
++	    maxtorps = mn;
++    }
++}
++
++void xgal_web_debug_set_maxtorps(n)
++int n;
++{
++    if(n < 1)
++	n = 1;
++    if(n > MAXTORPS)
++	n = MAXTORPS;
++    maxtorps = n;
++}
++
++void xgal_web_debug_set_ships(n)
++int n;
++{
++    if(n < 0)
++	n = 0;
++    if(n > 10)
++	n = 10;
++    ships = n;
++}
++
++/* n = number of full shield icons to show (0..8). */
++void xgal_web_debug_set_shields(n)
++int n;
++{
++    if(n < 0)
++	n = 0;
++    if(n > 8)
++	n = 8;
++    shieldsleft = 0;
++    plshield = (n > 0) ? (n * SHIELDTIME - SHIELDTIME / 19) : 0;
++}
++
++/* n = number of speed prizes grabbed (0..4; clamped at MAXSPEED). */
++void xgal_web_debug_set_speed(n)
++int n;
++{
++    float v;
++
++    if(n < 0)
++	n = 0;
++    if(n > 4)
++	n = 4;
++    v = MINSPEED + (float)n;
++    if(v > MAXSPEED)
++	v = MAXSPEED;
++    movespeed = v;
++}
++
++void xgal_web_debug_set_paused(b)
++int b;
++{
++    paused = b ? 1 : 0;
++}
++#endif /* ORIGINAL_XGALAGA */
+ int
++
+ main(argc, argv)
+ int     argc;
+ char  **argv;

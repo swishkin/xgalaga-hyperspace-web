@@ -6,12 +6,12 @@
 # see README.md), then:
 #
 #   docker build -t xgalaga-hyperspace .
-#   docker run -d --name xgalaga -p 8088:8088 -v xgalaga-scores:/data xgalaga-hyperspace
+#   docker run -d --name xgalaga -p 8088:8088 -v "$PWD/data":/data xgalaga-hyperspace
 #   # play: http://localhost:8088/
 #
 # All runtime knobs are environment variables read by leaderboard.py:
 #   XGAL_PORT (8088)  XGAL_HOST (0.0.0.0)  XGAL_WEBDIR (/app/www)
-#   XGAL_SCORES (/data/scores.json)  XGAL_MAX (100)  XGAL_ORIGIN (*)
+#   XGAL_SCORES (/data/scores.json)  XGAL_MAX_HIGH_SCORES (100)  XGAL_ORIGIN (*)
 #   XGAL_MAX_SCORE / XGAL_MAX_LEVEL / XGAL_MAX_BODY / XGAL_RATE_LIMIT / XGAL_RATE_WINDOW
 # See the docstring in leaderboard.py.
 FROM python:3.12-slim
@@ -27,6 +27,7 @@ WORKDIR /app
 COPY leaderboard.py ./
 COPY index.html ./www/
 COPY xgalaga.js ./www/
+COPY debug_webui.js ./www/
 COPY favicon.ico ./www/
 COPY icon.png ./www/
 

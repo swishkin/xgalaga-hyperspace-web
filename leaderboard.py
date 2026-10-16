@@ -15,21 +15,21 @@ Run:
     python3 leaderboard.py [port]
 
 Environment (all optional):
-    XGAL_PORT          listen port          (default 8088; or first CLI arg)
-    XGAL_HOST          bind address         (default 0.0.0.0)
-    XGAL_WEBDIR        static dir to serve  (default: this file's directory)
-    XGAL_SCORES        scores file path     (default: <webdir>/scores.json)
-    XGAL_MAX           entries to keep      (default 100)
-    XGAL_ORIGIN        CORS allowed origin  (default "*"; set to the game's
-                                            origin, e.g. https://x.g, to stop
-                                            other websites from using the API)
+    XGAL_PORT           listen port          (default 8088; or first CLI arg)
+    XGAL_HOST           bind address         (default 0.0.0.0)
+    XGAL_WEBDIR         static dir to serve  (default: this file's directory)
+    XGAL_SCORES         scores file path     (default: <webdir>/scores.json)
+    XGAL_MAX_HIGH_SCORES entries to keep     (default 100)
+    XGAL_ORIGIN         CORS allowed origin  (default "*"; set to the game's
+                                             origin, e.g. https://x.g, to stop
+                                             other websites from using the API)
 
 Abuse limits for unauthenticated POSTs (all optional):
-    XGAL_MAX_SCORE     max score accepted   (default 1000000000)
-    XGAL_MAX_LEVEL     max level accepted   (default 9999)
-    XGAL_MAX_BODY      max POST body bytes  (default 4096)
-    XGAL_RATE_LIMIT    max POSTs per client IP per window (default 5)
-    XGAL_RATE_WINDOW   rate-limit window in seconds (default 60)
+    XGAL_MAX_SCORE      max score accepted   (default 1000000000)
+    XGAL_MAX_LEVEL      max level accepted   (default 9999)
+    XGAL_MAX_BODY       max POST body bytes  (default 4096)
+    XGAL_RATE_LIMIT     max POSTs per client IP per window (default 5)
+    XGAL_RATE_WINDOW    rate-limit window in seconds (default 60)
 
 Endpoints:
     GET  /scores   -> JSON array of entries (sorted desc, top MAX)
@@ -51,7 +51,7 @@ PORT = int(os.environ.get("XGAL_PORT") or (sys.argv[1] if len(sys.argv) > 1 else
 HOST = os.environ.get("XGAL_HOST", "0.0.0.0")
 WEBDIR = os.environ.get("XGAL_WEBDIR", HERE)
 SCORES = os.environ.get("XGAL_SCORES", os.path.join(WEBDIR, "scores.json"))
-MAXN = int(os.environ.get("XGAL_MAX", "100"))
+MAXN = int(os.environ.get("XGAL_MAX_HIGH_SCORES", "100"))
 ORIGIN = os.environ.get("XGAL_ORIGIN", "*")
 
 # Abuse limits: a public, unauthenticated endpoint gets probed.  Keep
