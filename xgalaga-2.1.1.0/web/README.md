@@ -27,6 +27,9 @@ Nothing to install. Either:
   `python3 -m http.server 8000` from `web/`, then visit
   `http://localhost:8000/index.html`.
 
+`leaderboard.py` (see High scores) is the recommended server: it serves the
+game **and** the shared high-score API in one process.
+
 The build is a single self-contained `xgalaga.js` (WebAssembly + all level
 files + sound samples + the `webglue.js` input bridge inlined), so no other
 assets are fetched.
@@ -36,9 +39,36 @@ native game screen is 468×596), so sprites and text stay crisp instead of
 being blurred by fractional stretching. If the window is smaller than one
 native screen it falls back to a fractional scale.
 
-Note: high scores are written to the browser's in-memory filesystem
-(`$HOME/.xgalscores`, `/tmp/xgal_global_scores`) and do **not** persist
-across page reloads.
+## High scores
+
+High scores work like the original: two boards — the shared **Global high
+scores** and a local **Your high scores** per player.
+
+- **Global (shared) board** — in the browser build this is a small
+  self-hosted API server, `leaderboard.py` (Python 3 stdlib only, no
+  dependencies). Run it as the web server:
+
+  ```sh
+  python3 web/leaderboard.py [port]   # default 8088
+  ```
+
+  and play at `http://localhost:8088/`. On load the game fetches the board
+  from `/scores` and renders it on the title's "Global high scores" page;
+  when a new high score is entered, it is POSTed to `/scores` and persists
+  in `scores.json` (top 100 by default; edit the file to prune entries).
+  The API is same-origin by default; if the game is served from a different
+  origin, set `window.XGAL_LEADERBOARD_URL` in `index.html`. Without the
+  server (e.g. opening `index.html` straight from disk) the global board
+  stays empty.
+- **Your (per-user) board** — stored in the page's in-memory filesystem
+  (`$HOME/.xgalscores`) and reset by a page reload; the shared board above
+  is the persistent one.
+
+Name entry passes literal keystrokes: the game-control remaps
+(`f` = fire, `d` = shield, `j`/`l` = move, arrows) are disabled while the
+name prompt is up, so typing e.g. `FRED` stores `fred`, not the fire/shield
+key codes.
+
 ## Controls
 
 Keyboard control is the **default** (the original X11 build defaulted to the
@@ -95,9 +125,11 @@ emcc -O2 -UORIGINAL_XGALAGA -Iweb -I. \
     main.c data.c paths.c pathfile.c title.c explosions.c \
     score.c highscore.c prize.c images.c \
     web/wlib_web.c web/sound_web.c web/frate_web.c web/joystick_web.c \
+    web/leaderboard_web.c \
     --embed-file levels@/levels \
     --embed-file web/CREDITS@/tmp/xgal_credits \
     -s ASYNCIFY=1 -s EXIT_RUNTIME=1 -s ALLOW_MEMORY_GROWTH=1 -s SINGLE_FILE=1 \
+    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name'] \
     -o web/xgalaga.js
 ```
 
@@ -123,7 +155,9 @@ separately-cached scripts (and matches the single-file deliverable).
 | `sound_web.c`     | `sound.c`               | Web Audio playback of the embedded 8-bit 8 kHz samples (original forks a `/dev/dsp` sound server) |
 | `frate_web.c`     | `frate.c`               | `emscripten_sleep(16)` frame pacing (~60 FPS; original paces its 30 Hz tick with SIGALRM/sigsuspend — see Framerate note) |
 | `joystick_web.c`  | `linux-joystick.c`      | no-op (that file is `__linux__`-gated anyway) |
-| `webglue.js`      | —                       | browser side: keyboard/mouse → event queue, audio unlock/playback, canvas setup; prepended to `xgalaga.js` at build time |
+| `leaderboard_web.c` | —                    | C↔JS bridge for the shared high-score board: `xgal_web_submit()` (C → JS fetch POST on name entry), `xgal_web_refresh()` (JS → C, reload the global score file after the JS layer fetches the board), `xgal_web_getting_name()` (JS → C, name-prompt state so the input bridge types literal characters) |
+| `webglue.js`      | —                       | browser side: keyboard/mouse → event queue, audio unlock/playback, canvas setup, leaderboard fetch/submit; prepended to `xgalaga.js` at build time |
+| `leaderboard.py`  | —                       | self-hosted game + high-score API server (stdlib only); see High scores |
 | `config.h`        | `./configure` output    | hand-written build configuration             |
 | `CREDITS`         | `CREDITS` (in repo root) | the scroll-credits text, embedded at build time at `/tmp/xgal_credits` |
 | `mksounddata.py`  | —                       | generates `sounddata.h` from `sounds/*.raw`  |

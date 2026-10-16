@@ -20,6 +20,7 @@ python3 web/mksounddata.py web/sounddata.h
 #   sound_web.c     Web Audio sound (replaces sound.c's forked sound server)
 #   frate_web.c     emscripten_sleep frame pacing (replaces frate.c's SIGALRM)
 #   joystick_web.c  no-op joystick (replaces linux-joystick.c, __linux__-gated)
+#   leaderboard_web.c shared high-score leaderboard bridge (submit + refresh)
 #
 # ASYNCIFY lets the blocking game loop yield to the browser's event loop
 # via emscripten_sleep() (see frate_web.c).  EXIT_RUNTIME makes quit keys
@@ -29,13 +30,14 @@ emcc -O2 -UORIGINAL_XGALAGA \
     -Iweb -I. \
     main.c data.c paths.c pathfile.c title.c explosions.c \
     score.c highscore.c prize.c images.c \
-    web/wlib_web.c web/sound_web.c web/frate_web.c web/joystick_web.c \
+    web/wlib_web.c web/sound_web.c web/frate_web.c web/joystick_web.c web/leaderboard_web.c \
     --embed-file levels@/levels \
     --embed-file web/CREDITS@/tmp/xgal_credits \
     -s ASYNCIFY=1 \
     -s EXIT_RUNTIME=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s SINGLE_FILE=1 \
+    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name'] \
     -o web/xgalaga.js
 # Inline webglue.js (input bridge) at the front of the bundle: the deliverable
 # is a single file, and one script tag avoids a browser cache desync between

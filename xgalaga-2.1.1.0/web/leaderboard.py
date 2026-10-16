@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""XGalaga Hyperspace — global high-score leaderboard (self-hosted).
+
+One process serves both the static web game and a tiny JSON API for a shared,
+persistent high-score board. No dependencies (Python 3 stdlib only).
+
+Storage is a plain, human-editable JSON file (default: scores.json next to this
+script) holding an array of {"name", "score", "level"} objects, one per line,
+kept sorted by score (descending) and trimmed to the top MAX entries. To
+clean up the board, edit that file by hand (delete an entry's three lines) and
+restart the server — or edit it while it's running, since it is re-read on
+every request.
+
+Run:
+    python3 leaderboard.py [port]
+
+Environment (all optional):
+    XGAL_PORT     listen port          (default 8088; or first CLI arg)
+    XGAL_HOST     bind address         (default 0.0.0.0)
+    XGAL_WEBDIR   static dir to serve  (default: this file's directory)
+    XGAL_SCORES   scores file path     (default: <webdir>/scores.json)
+    XGAL_MAX      entries to keep      (default 100)
+    XGAL_ORIGIN   CORS allowed origin  (default "*"; set to e.g. https://x.g to lock down)
+
+Endpoints:
+    GET  /scores   -> JSON array of entries (sorted desc, top MAX)
+    POST /scores   -> body {"name": "...", "score": N, "level": N}; inserts,
+                     re-sorts, trims to MAX, persists, returns the new board
+    GET  /         -> the static game (index.html, xgalaga.js, ...)
+"""
+import json
+import os
+import sys
+import threading
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+from urllib.parse import urlparse
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PORT = int(os.environ.get("XGAL_PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8088))
+HOST = os.environ.get("XGAL_HOST", "0.0.0.0")
+WEBDIR = os.environ.get("XGAL_WEBDIR", HERE)
+SCORES = os.environ.get("XGAL_SCORES", os.path.join(WEBDIR, "scores.json"))
+MAXN = int(os.environ.get("XGAL_MAX", "100"))
+ORIGIN = os.environ.get("XGAL_ORIGIN", "*")
+
+_lock = threading.Lock()
+
+
+def _norm(o):
+    """Coerce an entry dict to {name:str<=20, score:int, level:int}."""
+    if not isinstance(o, dict):
+        o = {}
+    name = str(o.get("name", ""))[:20]
+    try:
+        score = int(o.get("score", 0))
+    except (TypeError, ValueError):
+        score = 0
+    try:
+        level = int(o.get("level", 0))
+    except (TypeError, ValueError):
+        level = 0
+    return {"name": name, "score": score, "level": level}
+
+
+def _read():
+    """Read + normalize + sort the scores file. Caller holds _lock."""
+    if not os.path.exists(SCORES):
+        return []
+    try:
+        with open(SCORES, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    entries = [_norm(e) for e in data]
+    entries.sort(key=lambda e: e["score"], reverse=True)
+    return entries[:MAXN]
+
+
+def _write(entries):
+    """Atomically write the scores file. Caller holds _lock."""
+    tmp = SCORES + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        if entries:
+            f.write("[\n")
+            for i, e in enumerate(entries):
+                line = "  " + json.dumps(e, ensure_ascii=False)
+                f.write(line + ("," if i < len(entries) - 1 else "") + "\n")
+            f.write("]\n")
+        else:
+            f.write("[]\n")
+    os.replace(tmp, SCORES)
+
+
+def get_board():
+    with _lock:
+        return _read()
+
+
+def add_score(entry):
+    with _lock:
+        entries = _read()
+        entries.append(_norm(entry))
+        entries.sort(key=lambda e: e["score"], reverse=True)
+        entries = entries[:MAXN]
+        _write(entries)
+        return entries
+
+
+class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=WEBDIR, **kwargs)
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", ORIGIN)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def _send_json(self, code, obj):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
+
+    def do_GET(self):
+        if urlparse(self.path).path in ("/scores", "/scores/"):
+            self._send_json(200, get_board())
+            return
+        super().do_GET()
+
+    def do_POST(self):
+        if urlparse(self.path).path not in ("/scores", "/scores/"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(n) or b"{}")
+        except (OSError, ValueError):
+            self._send_json(400, {"error": "invalid JSON body"})
+            return
+        self._send_json(200, add_score(data))
+
+    def log_message(self, fmt, *args):  # keep the console quiet
+        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+
+
+def main():
+    os.makedirs(WEBDIR, exist_ok=True)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(
+        "XGalaga Hyperspace: game + leaderboard on http://%s:%d/  "
+        "(scores: %s, keep top %d)" % (HOST, PORT, SCORES, MAXN),
+        flush=True,
+    )
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

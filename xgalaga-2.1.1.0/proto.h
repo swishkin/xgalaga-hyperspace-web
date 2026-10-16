@@ -41,6 +41,10 @@ int check_score(int score);
 void show_scores(void);
 void load_scores(void);
 void print_scores(void);
+#ifdef __EMSCRIPTEN__
+void xgal_web_submit(const char *name, long score, long level);
+void xgal_web_refresh(void);
+#endif
 /* prize.c */
 void init_prizes(void);
 void new_prize(float x, float y);

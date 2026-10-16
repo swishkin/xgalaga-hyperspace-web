@@ -31,12 +31,21 @@
 #include "proto.h"
 #include "data.h"
 
-/* Global score file is insecure and rather useless today. */
-#define NO_GLOBAL_SCORES 1
-#ifdef NO_GLOBAL_SCORES
-#define NUM_GLOBAL_SCORES 0
-#else
+/* Native X11 build: the local score file is insecure/useless, so the
+ * "global" board is disabled (per-user scores only).  Web build: the
+ * "global" board is the shared online leaderboard (webglue.js fetches and
+ * submits it against the leaderboard API server), so enable it there.
+ *
+ * NO_GLOBAL_SCORES follows the upstream convention of a defined/undefined
+ * flag -- the rest of this file gates the global-board code with
+ * #ifndef NO_GLOBAL_SCORES -- so the web build must leave it UNDEFINED to
+ * enable the board; defining it to 0 would not (an #ifdef test only looks
+ * at definedness). */
+#ifdef __EMSCRIPTEN__
 #define NUM_GLOBAL_SCORES 20
+#else
+#define NO_GLOBAL_SCORES 1
+#define NUM_GLOBAL_SCORES 0
 #endif
 #define NUM_MY_SCORES 10
 
@@ -162,7 +171,7 @@ static void save_scores()
     close(hsf);
 #endif /* NO_GLOBAL_SCORES */
     if((home = getenv("HOME"))) {
-#ifndef NO_GLOBAL_SCORES
+#if !defined(NO_GLOBAL_SCORES) && !defined(__EMSCRIPTEN__)
 	gid_t my_egid = getegid();
 	if (setgid(getgid()) != 0) {
 		perror("setgid");
@@ -171,7 +180,7 @@ static void save_scores()
 #endif
 	snprintf(my_file_name, sizeof(my_file_name)-1, "%s/.xgalscores", home);
 	hsf = open(my_file_name, O_WRONLY | O_TRUNC | O_CREAT, 0644);
-#ifndef NO_GLOBAL_SCORES
+#if !defined(NO_GLOBAL_SCORES) && !defined(__EMSCRIPTEN__)
 	if (setgid(my_egid) != 0) {
 		perror("setgid back");
 		exit(1);
@@ -283,6 +292,9 @@ void add_score(char *name, int score)
 	}
     }
     save_scores();
+#ifdef __EMSCRIPTEN__
+    xgal_web_submit(name, score, level);
+#endif
 }
 
 int score_key(W_Event *ev)

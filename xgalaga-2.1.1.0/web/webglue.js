@@ -21,12 +21,29 @@
         evq.push(v);
     }
 
+    /* Non-zero while the high-score name prompt is up (queried from C via the
+     * exported xgal_web_getting_name).  In that state the game-control remaps
+     * below must not apply, or typing f/d/j/l would produce the fire/shield/
+     * move key codes instead of the literal characters. */
+    function inNameEntry() {
+        try {
+            return !!(M && M._xgal_web_getting_name && M._xgal_web_getting_name());
+        } catch (e) { return false; }
+    }
+
     function keyDownCode(e) {
         var c = e.keyCode;
         if (c === 13) return 256 + 13;       /* Enter  (256 + '\r') */
+        if (c === 32) return 32;             /* space */
+        if (inNameEntry() && !e.ctrlKey) {
+            /* Name entry wants literal characters: ignore the arrow keys
+             * (there is no cursor to move) and pass f/d/j/l through. */
+            if (c === 37 || c === 39) return null;
+            if (c === 70 || c === 68 || c === 74 || c === 76)
+                return e.shiftKey ? c : c + 32;
+        }
         if (c === 37) return 226;            /* Left arrow  -> ctrl-b (98+128) */
         if (c === 39) return 230;            /* Right arrow -> ctrl-f (102+128) */
-        if (c === 32) return 32;             /* space */
         if (c === 74) return 226;            /* J = move left  -> ctrl-b */
         if (c === 76) return 230;            /* L = move right -> ctrl-f */
         if (c === 70) return 32;             /* F = fire        -> space */
@@ -126,7 +143,9 @@
                     (e.ctrlKey && (e.keyCode === 70 || e.keyCode === 66)))
                     e.preventDefault();
                 audio.unlock();
-                pushEvent(2, keyDownCode(e), 0, 0, 0);
+                var code = keyDownCode(e);
+                if (code !== null)
+                    pushEvent(2, code, 0, 0, 0);
             });
             document.addEventListener('keyup', function (e) {
                 pushEvent(4, keyUpCode(e), 0, 0, 0);
@@ -179,4 +198,74 @@
     }
     var M = typeof Module !== 'undefined' ? Module : (globalThis.Module = {});
     M.onExit = doExit;
+    /* --- shared high-score leaderboard (self-hosted API) -----------------
+     * The "global" board is a small always-on server (leaderboard.py) that
+     * also serves this page, so the API is same-origin /scores by default.
+     * Override the origin with window.XGAL_LEADERBOARD_URL in index.html.
+     *
+     * On load: fetch the board, write it into the global score file the C
+     * side reads (SCOREFILE = /tmp/xgal_global_scores) in its binary format
+     * (per entry: 20-byte name + 4-byte big-endian score + 4-byte big-endian
+     * level, NUM_GLOBAL_SCORES=20 entries), then ask C to reload the arrays.
+     * On a new high score: C's xgal_web_submit() calls __xgalSubmit to POST. */
+    var LB_N = 20;                 /* NUM_GLOBAL_SCORES (web, highscore.c) */
+    var LB_ENTRY = 28;             /* 20-byte name + 4-byte score + 4-byte level */
+    var LB_FILE = '/tmp/xgal_global_scores'; /* == SCOREFILE (web/config.h) */
+
+    function lbScoresUrl() {
+        var base = String(globalThis.XGAL_LEADERBOARD_URL || '').replace(/\/+$/, '');
+        return base + '/scores';
+    }
+
+    function lbRefresh() {
+        try {
+            if (typeof M._xgal_web_refresh === 'function') { M._xgal_web_refresh(); return; }
+            if (typeof M.xgal_web_refresh === 'function') { M.xgal_web_refresh(); return; }
+            if (M.capi && typeof M.capi.xgal_web_refresh === 'function') { M.capi.xgal_web_refresh(); return; }
+            if (M.ccall) M.ccall('xgal_web_refresh', null, [], []);
+        } catch (e) { console.warn('leaderboard refresh failed', e); }
+    }
+
+    function lbLoadBoard() {
+        fetch(lbScoresUrl(), { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (list) {
+                var FS = (window.FS || M.FS);
+                if (!FS || typeof FS.writeFile !== 'function') return;
+                list = Array.isArray(list) ? list : [];
+                var buf = new Uint8Array(LB_N * LB_ENTRY);
+                for (var i = 0; i < LB_N; i++) {
+                    var e = list[i] || {};
+                    var name = String(e.name || '');
+                    for (var c = 0; c < 20; c++)
+                        buf[i * LB_ENTRY + c] = c < name.length ? (name.charCodeAt(c) & 0xff) : 0;
+                    var s = e.score | 0, l = e.level | 0, o = i * LB_ENTRY + 20;
+                    buf[o + 0] = (s >>> 24) & 0xff; buf[o + 1] = (s >>> 16) & 0xff;
+                    buf[o + 2] = (s >>> 8) & 0xff; buf[o + 3] = s & 0xff;
+                    buf[o + 4] = (l >>> 24) & 0xff; buf[o + 5] = (l >>> 16) & 0xff;
+                    buf[o + 6] = (l >>> 8) & 0xff; buf[o + 7] = l & 0xff;
+                }
+                FS.writeFile(LB_FILE, buf);
+                lbRefresh();
+            })
+            .catch(function (e) { console.warn('leaderboard load failed', e); });
+    }
+
+    globalThis.__xgalSubmit = function (name, score, level) {
+        try {
+            fetch(lbScoresUrl(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: String(name).slice(0, 20), score: score, level: level })
+            }).then(function (r) {
+                if (!r.ok) console.warn('leaderboard POST status', r.status);
+            }).catch(function (e) { console.warn('leaderboard POST failed', e); });
+        } catch (e) { console.warn('leaderboard submit error', e); }
+    };
+
+    var _origRTI = M.onRuntimeInitialized;
+    M.onRuntimeInitialized = function () {
+        if (typeof _origRTI === 'function') _origRTI();
+        lbLoadBoard();
+    };
 })();

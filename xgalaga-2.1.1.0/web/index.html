@@ -56,6 +56,9 @@
 </script>
 
 <script>
+  /* Point the game at a leaderboard API on another origin if it is not
+   * served alongside the game (default: same-origin /scores). */
+  // window.XGAL_LEADERBOARD_URL = "http://localhost:8088";
   var Module = {
     canvas: document.getElementById("xgalcanvas"),
     print: function (t) { console.log(t); },
