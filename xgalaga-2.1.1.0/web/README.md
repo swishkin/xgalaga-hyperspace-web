@@ -41,33 +41,91 @@ native screen it falls back to a fractional scale.
 
 ## High scores
 
-High scores work like the original: two boards — the shared **Global high
-scores** and a local **Your high scores** per player.
+The title screen shows a single **"High scores"** board. In the browser
+build it is the shared online board (top 20 of the server's top 100); in
+a native X11 build it is the per-user board (the original "Your high
+scores" — the original's "global" file was world-writable and useless).
+A newly entered score is highlighted on the board in the original
+highlight color (`W_DarkGrey`, solid yellow in this game's palette).
 
-- **Global (shared) board** — in the browser build this is a small
-  self-hosted API server, `leaderboard.py` (Python 3 stdlib only, no
-  dependencies). Run it as the web server:
+- **Shared (browser) board** — a small self-hosted API server,
+  `leaderboard.py` (Python 3 stdlib only, no dependencies). Run it as the
+  web server:
 
   ```sh
   python3 web/leaderboard.py [port]   # default 8088
   ```
 
   and play at `http://localhost:8088/`. On load the game fetches the board
-  from `/scores` and renders it on the title's "Global high scores" page;
-  when a new high score is entered, it is POSTed to `/scores` and persists
-  in `scores.json` (top 100 by default; edit the file to prune entries).
-  The API is same-origin by default; if the game is served from a different
-  origin, set `window.XGAL_LEADERBOARD_URL` in `index.html`. Without the
-  server (e.g. opening `index.html` straight from disk) the global board
-  stays empty.
-- **Your (per-user) board** — stored in the page's in-memory filesystem
-  (`$HOME/.xgalscores`) and reset by a page reload; the shared board above
-  is the persistent one.
+  from `/scores` and renders it on the title page; when a new high score
+  is entered, it is POSTed to `/scores` and persists in `scores.json`
+  (top 100 by default; edit the file to prune entries). The API is
+  same-origin by default; if the game is served from a different origin,
+  set `window.XGAL_LEADERBOARD_URL` in `index.html`. Without the server
+  (e.g. opening `index.html` straight from disk) the board stays empty.
+- **Per-user board** — still maintained: the name prompt appears when the
+  score makes *either* the shared board or the per-user top 10, so a
+  locally notable score still gets a name. In the browser build it lives
+  in the page's in-memory filesystem (`$HOME/.xgalscores`) and resets on
+  page reload; the shared board above is the persistent one.
 
 Name entry passes literal keystrokes: the game-control remaps
 (`f` = fire, `d` = shield, `j`/`l` = move, arrows) are disabled while the
 name prompt is up, so typing e.g. `FRED` stores `fred`, not the fire/shield
 key codes.
+
+## Deploying with Docker
+
+For a persistent setup (scores survive container updates; the image ships
+only the game page and the server — no source tree):
+
+```sh
+web/build.sh          # build the bundle first (needs emsdk; see Rebuilding)
+docker compose up -d  # from the repo root
+```
+
+Play at `http://localhost:8088/`. Every runtime knob is an environment
+variable (see the `docker-compose.yml` comments and the `leaderboard.py`
+docstring): port, board size, CORS origin, abuse limits. Scores persist in
+a named volume mounted at `/data`. The server runs as `nobody`, and its
+code lives outside the served directory, so the public endpoint can only
+serve `index.html` and `xgalaga.js`.
+
+## Security
+
+**Client** — low risk. The bundle contains no `innerHTML`, no
+`document.write`, no `eval`; board names and scores are drawn only as
+canvas glyphs, so a malicious board entry (a name containing HTML or JS)
+cannot execute code in a player's browser. There are no cookies or
+localStorage (no stored state, no CSRF surface), and the only network
+request the page makes is the `fetch` to the leaderboard URL configured in
+`index.html` (deploy-controlled, not user-controllable).
+
+**Leaderboard API** — unauthenticated by design: players can't hold a
+secret, the game code is public. Mitigations in `leaderboard.py`:
+
+- per-IP rate limit on submissions (default 5 per 60 s → 429);
+  `X-Forwarded-For` is honored only from a local reverse proxy, so a remote
+  client can't spoof its address;
+- POST body cap (default 4 KiB → 413);
+- score/level clamped to sane ranges (defaults 10⁹ / 9999), names
+  truncated to 20 chars;
+- `XGAL_ORIGIN` (default `*`): set it to the game's origin when hosting,
+  so unrelated websites can't read or flood the board through a player's
+  browser.
+
+Remaining risks, and how to close them:
+
+| Risk | Mitigation |
+|------|------------|
+| Score spam / flooding the board | in-server rate limit + caps; extra limits in a reverse proxy if needed |
+| Plain HTTP (game and API traffic visible/alterable in transit) | TLS-terminating reverse proxy (Caddy/nginx + Let's Encrypt) — required for public use; if the game is HTTPS and the API is HTTP the browser blocks the fetch (mixed content) and the board simply stays empty |
+| Forged scores (no signed submissions) | not fixable for a public client; caps + rate limit bound the damage — treat the board as a fun feature, not authoritative |
+| Thread exhaustion under a connection flood | `ThreadingHTTPServer` is per-connection; put a reverse proxy (Caddy/nginx) in front for public deployment |
+| Bundle tampering if the hosting path is compromised (no SRI) | keep the serving path behind TLS + a trustworthy host; for CDN delivery add `integrity`/`crossorigin` to the `<script>` tag (the hash must be regenerated on every `build.sh` run) |
+
+Recommended public setup: `Internet → Caddy (TLS) → xgalaga container`,
+with `XGAL_ORIGIN` set to the game's public origin.
 
 ## Controls
 

@@ -1,0 +1,32 @@
+# XGalaga: Hyperspace — game + shared high-score leaderboard.
+#
+#   docker compose up -d        # build (first time) and start on :8088
+#   # play: http://localhost:8088/
+#
+# All leaderboard.py knobs can be set under `environment:` below; the
+# defaults are in the Dockerfile / leaderboard.py docstring.
+services:
+  xgalaga:
+    build: .
+    image: xgalaga-hyperspace:latest
+    ports:
+      - "8088:8088"          # host:container — change the left side to rebind
+    environment:
+      XGAL_PORT: "8088"
+      XGAL_MAX: "100"        # board entries kept
+      # Security: when the game has a fixed public origin, lock the API to
+      # it so other websites cannot read/flood the board through a player's
+      # browser (see the security notes in xgalaga-2.1.1.0/web/README.md):
+      # XGAL_ORIGIN: "https://xgal.example.com"
+      # Abuse limits (defaults shown):
+      # XGAL_MAX_SCORE: "1000000000"
+      # XGAL_MAX_LEVEL: "9999"
+      # XGAL_MAX_BODY: "4096"
+      # XGAL_RATE_LIMIT: "5"
+      # XGAL_RATE_WINDOW: "60"
+    volumes:
+      - scores:/data         # persist scores.json across updates/restarts
+    restart: unless-stopped
+
+volumes:
+  scores:
