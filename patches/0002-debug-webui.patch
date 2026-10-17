@@ -1,6 +1,5 @@
-diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
---- xgal-p1/xgalaga-2.1.1.0/main.c	2026-10-16 11:39:56.254844858 -0500
-+++ xgal-p2/xgalaga-2.1.1.0/main.c	2026-10-16 14:03:36.932491899 -0500
+--- xgal-p1/xgalaga-2.1.1.0/main.c	2026-10-16 19:23:36.029366087 -0500
++++ xgal-p2/xgalaga-2.1.1.0/main.c	2026-10-17 04:43:59.025536858 -0500
 @@ -22,6 +22,9 @@
  #include "paths.h"
  #include "proto.h"
@@ -19,7 +18,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  static int plflash = 100;   /* was 50 @ 30Hz: doubled ticks */
  static int fullscreen = 0;
  #ifndef ORIGINAL_XGALAGA
-@@ -185,6 +189,33 @@
+@@ -185,6 +189,80 @@
      }
  }
  
@@ -50,67 +49,65 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +    }
 +}
 +
++#ifndef ORIGINAL_XGALAGA
++/* Equipment indicators on the score row: [weapon icon] [maxtorps]
++ * [speed icons], right-aligned on the same row as the Score:/Level: text
++ * and ship icons (shellWin, y 0..W_Textheight).  Fixed position - unlike
++ * the old strip left of the shield bar, the group does not shift as the
++ * shield count changes.  do_score() clears the whole row black whenever
++ * score/level/ships change, so this is drawn after do_score() each frame;
++ * the box clear below is black-on-black (the row's own background) and
++ * only exists to sweep stale pixels when the group content changes. */
++static void draw_equipment()
++{
++    /* Each speed prize steps movespeed by 0.5 (prize.c): MINSPEED 1.5 to
++     * MAXSPEED 4.0 is 6 levels, i.e. 0..5 prizes.  Every level is exactly
++     * representable in binary, so this count is exact. */
++    int nspeed = (int)((movespeed - MINSPEED) * 2.0f + 0.5f);
++    int maxnspeed = (int)((MAXSPEED - MINSPEED) * 2.0f + 0.5f);
++    int right = WINWIDTH - 2;
++    int x, total, tw, i;
++    char buf[8];
++
++    if(nspeed > maxnspeed)
++	nspeed = maxnspeed;
++    if(nspeed < 0)
++	nspeed = 0;
++
++    sprintf(buf, "%d", maxtorps);
++    tw = W_StringWidth(buf, W_RegularFont);
++    total = xgal_icon_weapon[weapon].w + 3 + tw + 3;
++    if(nspeed > 0)
++	/* trailing gap not drawn */
++	total += nspeed * (xgal_icon_speed.w + 1) - 1;
++    /* Fixed box (worst case: 11px icon + 3 + 2 digits + 3 + 5 speed
++     * icons = 57px): the group's left edge moves as its width changes,
++     * so a size-tracked clear would leave ghost pixels. */
++    W_ClearArea(shellWin, right - 60, 0, 60, W_Textheight);
++    x = right - total;
++    draw_hud_icon(shellWin, x, (W_Textheight - xgal_icon_weapon[weapon].h) / 2,
++		  &xgal_icon_weapon[weapon]);
++    x += xgal_icon_weapon[weapon].w + 3;
++    W_MaskText(shellWin, x, 0, W_White, buf, strlen(buf), W_RegularFont);
++    x += tw + 3;
++    for(i = 0; i < nspeed; i++)
++	draw_hud_icon(shellWin, x + i * (xgal_icon_speed.w + 1),
++		      (W_Textheight - xgal_icon_speed.h) / 2, &xgal_icon_speed);
++}
++#endif /* ORIGINAL_XGALAGA */
++
  static void do_stars()
  {
      int i;
-@@ -216,6 +247,56 @@
+@@ -216,6 +294,7 @@
              }
              W_DrawPoint(baseWin, PX(stars[i].x), PX(stars[i].y), stars[i].color);
          }
-+#ifndef ORIGINAL_XGALAGA
-+	/* Equipment indicators, immediately left of the shield block:
-+	 * [weapon icon] [maxtorps] [speed icon xN].  The shield block spans
-+	 * WINWIDTH-20*shieldcount..WINWIDTH, so the group's right edge
-+	 * follows the shield count (0 shields -> flush with the right
-+	 * edge).  The strip is cleared first: both the bar and the group
-+	 * shift as the count changes, and the persistent framebuffer would
-+	 * otherwise keep stale pixels. */
-+	{
-+	    int shieldcount = 0;
-+	    int total_shields;
-+	    int nspeed = (int)(movespeed - MINSPEED + 0.5f);
-+	    int maxnspeed = (int)(MAXSPEED - MINSPEED + 0.5f);
-+	    int right, x, i;
-+
-+	    W_ClearArea(baseWin, WINWIDTH - 170, 0, 170, 20);
-+	    if((plshield > 0) || (shieldsleft > 0)) {
-+		total_shields = (plshield + shieldsleft) * 19 / SHIELDTIME + 1;
-+		while(total_shields > 0) {
-+		    shieldcount++;
-+		    total_shields -= 19;
-+		}
-+	    }
-+	    if(nspeed > maxnspeed)
-+		nspeed = maxnspeed;
-+	    right = WINWIDTH - 20 * shieldcount;
-+	    {
-+		char buf[8];
-+		int tw, total;
-+
-+		sprintf(buf, "%d", maxtorps);
-+		tw = W_StringWidth(buf, W_RegularFont);
-+		total = xgal_icon_weapon[weapon].w + 3 + tw + 3;
-+		if(nspeed > 0)
-+		    /* trailing gap not drawn */
-+		    total += nspeed * (xgal_icon_speed.w + 1) - 1;
-+		x = right - total;
-+		draw_hud_icon(baseWin, x, (20 - xgal_icon_weapon[weapon].h) / 2,
-+			      &xgal_icon_weapon[weapon]);
-+		x += xgal_icon_weapon[weapon].w + 3;
-+		W_MaskText(baseWin, x, (20 - W_Textheight) / 2, W_White,
-+			    buf, strlen(buf), W_RegularFont);
-+		x += tw + 3;
-+		for(i = 0; i < nspeed; i++)
-+		    draw_hud_icon(baseWin, x + i * (xgal_icon_speed.w + 1),
-+				  (20 - xgal_icon_speed.h) / 2, &xgal_icon_speed);
-+	    }
-+	}
-+#endif /* ORIGINAL_XGALAGA */
 +
  #ifdef SHOW_SHIELD_BAR
  	    if ((plshield > 0) || (shieldsleft > 0)) { 
  		int shieldcount = 0;
-@@ -235,6 +316,8 @@
+@@ -235,6 +314,8 @@
  #endif /* SHOW_SHIELD_BAR */
  
  
@@ -119,7 +116,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
      }
      if(starspeed != 1) {
          char buf[20];
-@@ -843,6 +926,35 @@
+@@ -843,6 +924,35 @@
                       playerShip->width, h);
  }
  
@@ -155,7 +152,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  static void do_player(mx, my, but)
  int mx, my, but;
  {
-@@ -851,7 +963,6 @@
+@@ -851,7 +961,6 @@
      static int shotside = 0;
  #endif
      W_Event wev;
@@ -163,7 +160,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  
      if(gameOver) {
          while(W_EventsPending()) {
-@@ -906,29 +1017,7 @@
+@@ -906,29 +1015,7 @@
                  if(!getting_name) {
                      if(mouseControl)
                          W_GrabPointer(baseWin);
@@ -194,7 +191,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  }
                  break;
              case W_EV_EXPOSE:
-@@ -950,14 +1039,14 @@
+@@ -950,14 +1037,14 @@
          case W_EV_KEY_OFF:
              switch(wev.key) {
              case 'f'+128:
@@ -212,7 +209,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  break;
  #ifdef ACTIVATED_SHIELD
  	    case 'x':
-@@ -972,14 +1061,14 @@
+@@ -972,14 +1059,14 @@
          case W_EV_KEY:
              switch(wev.key) {
              case 'f'+128:
@@ -230,7 +227,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  break;
              case 'k':
              case 256+'k':       //363:
-@@ -1097,14 +1186,14 @@
+@@ -1097,14 +1184,14 @@
  
          if((!mouseControl && ! js_device) ||
  	   (js_device && mx == plx && but == 0)) {
@@ -248,7 +245,7 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
                  but = W_LBUTTON;
              else
                  but = 0;
-@@ -1260,7 +1349,140 @@
+@@ -1260,7 +1347,136 @@
      }
  }
  
@@ -362,20 +359,16 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
 +    shieldsleft = (n > 0) ? (n * SHIELDTIME - SHIELDTIME / 19) : 0;
 +}
 +
-+/* n = number of speed prizes grabbed (0..4; clamped at MAXSPEED). */
++/* n = number of speed prizes grabbed (0..5); matches the in-game
++ * half-step: each PR_SPEED prize does movespeed += 0.5 (prize.c). */
 +void xgal_web_debug_set_speed(n)
 +int n;
 +{
-+    float v;
-+
 +    if(n < 0)
 +	n = 0;
-+    if(n > 4)
-+	n = 4;
-+    v = MINSPEED + (float)n;
-+    if(v > MAXSPEED)
-+	v = MAXSPEED;
-+    movespeed = v;
++    if(n > 5)
++	n = 5;
++    movespeed = MINSPEED + 0.5f * (float)n;
 +}
 +
 +void xgal_web_debug_set_paused(b)
@@ -389,3 +382,53 @@ diff -r xgal-p1/xgalaga-2.1.1.0/main.c xgal-p2/xgalaga-2.1.1.0/main.c
  main(argc, argv)
  int     argc;
  char  **argv;
+@@ -1402,6 +1618,9 @@
+         do_explosions();
+  	do_stars();
+         do_score();
++#ifndef ORIGINAL_XGALAGA
++        draw_equipment();
++#endif
+         if(gameOver) { do_title(); if(getting_name) do_name(); }
+         if(paused) do_pause();
+ 
+--- xgal-p1/xgalaga-2.1.1.0/title.c	2026-10-16 19:23:36.029921784 -0500
++++ xgal-p2/xgalaga-2.1.1.0/title.c	2026-10-16 19:18:03.639395398 -0500
+@@ -89,26 +89,26 @@
+ 
+ static void show_help()
+ {
+-    int top = 270;
++    int top = 262;
+ 
+     center_text("         Keyboard controls           ", top, W_Red);
+     center_text("  j / l              move            ", top+10, W_Yellow);
+-    center_text("  f                  fire            ", top+20, W_Yellow);
+-    center_text("  p                  pause           ", top+30, W_Cyan);
+-    center_text("  q                  end game        ", top+40, W_Cyan);
+-    center_text("  Q                  quick quit      ", top+50, W_Cyan);
+-    center_text("  k                  keyboard control", top+60, W_Cyan);
+-    center_text("  m                  mouse control   ", top+70, W_Cyan);
++    center_text("  f                  fire            ", top+21, W_Yellow);
++    center_text("  p                  pause           ", top+32, W_Cyan);
++    center_text("  q                  end game        ", top+43, W_Cyan);
++    center_text("  Q                  quick quit      ", top+54, W_Cyan);
++    center_text("  k                  keyboard control", top+65, W_Cyan);
++    center_text("  m                  mouse control   ", top+76, W_Cyan);
+ #ifndef ORIGINAL_XGALAGA
+-    center_text("  d                  shield          ", top+80, W_Cyan);
++    center_text("  d                  shield          ", top+87, W_Cyan);
+ #endif
+ #ifdef SOUND
+-    center_text("  s                  toggle sound    ", top+90, W_Cyan);
++    center_text("  s                  toggle sound    ", top+98, W_Cyan);
+ #endif
+ 	  
+-    center_text("Bonus ships at 20,000, 50,000, then every 50,000.", top+120, W_Green);
++    center_text("Bonus ships at 20,000, 50,000, then every 50,000.", top+128, W_Green);
+     center_text("XGalaga Home page: http://rumsey.org/xgal.html",
+-		top+150, W_Cyan);
++		top+158, W_Cyan);
+ }
+ 
+ int read_credits()

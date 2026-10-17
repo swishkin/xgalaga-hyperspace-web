@@ -85,7 +85,8 @@ With the panel enabled it appears to the right of the canvas:
   15 and the meta-level ramps as usual), set the current weapon, min torps
   (1–15), ships (0–10), shields (0–8 shield icons; they are *banked*, not
   activated — the shield key still brings the shield up, as in the
-  original) and speed prizes (0–4), and pause / resume.  The setters take
+  original) and speed prizes (0–5, matching the in-game half-steps from
+  1.5 to 4.0), and pause / resume.  The setters take
   effect immediately, paused or not.  Changing the weapon floors the torp
   count at that weapon's current-level minimum, as the game does on weapon
   pickup.
@@ -333,16 +334,19 @@ started immediately).
   original's spacing.
 - A 1 px grey (`#808080`) border frames the game canvas so its edges are
   visible against the black page.
-- The top-right strip carries the equipment indicators, immediately left
-  of the shield bar (and shifting with it): the current weapon's torp
-  icon, the min-torp count, and one speed icon per speed prize taken, with
-  3 px between the sections.  The icons are generated into `hudicons.h`
-  by `mkhudicons.py` from the prize sprites and drawn in each pill's
-  primary color (single = yellow pill, double = teal, triple = cyan,
-  spread = blue, machine = red); the speed icon is the red zigzag of the
-  speed pill cropped to the lightning bolt, drawn in the pill's yellow.
-  The strip is re-cleared and redrawn every frame so the group tracks the
-  shield count (0 shields → flush with the right edge).
+- The equipment indicators sit on the score row (the shell window's top
+  line, the same row as the "Score:" / "Level:" text and the ship icons),
+  right-aligned in the space the upstream game leaves vacant there: the
+  speed prize taken (each prize steps the ship speed by 0.5, from 1.5 to
+  4.0, so at most 5 icons), with 3 px between the sections.  The position
+  the group does not shift as the shield bar to its lower right grows or
+  shrinks.  The icons are generated into `hudicons.h` by `mkhudicons.py`
+  from the prize sprites and drawn in each pill's primary color (single =
+  yellow pill, double = teal, triple = cyan, spread = blue, machine =
+  red); the speed icon is the red zigzag of the speed pill cropped to the
+  lightning bolt, drawn in the pill's yellow.  The group is redrawn every
+  frame after `do_score()`, which clears the whole row whenever the score,
+  level or ship count changes.
 
 ### Input
 
@@ -403,7 +407,7 @@ interpretation:
 | `webglue.js`        | —                       | browser side: keyboard/mouse → event queue, audio unlock/playback, canvas setup, blur keyup synthesis, leaderboard fetch/submit; prepended to `xgalaga.js` at build time |
 | `debug_webui.js`    | —                       | optional debug panel (gated by `XGAL_DEBUG_WEBUI`/`?debug`): polls `xgal_web_debug_state()` and drives the `xgal_web_debug_set_*` setters |
 | `leaderboard.py`    | —                       | self-hosted game + high-score API server (stdlib only); see High scores |
-| `index.html`        | —                       | page: canvas, 1 px grey border, integer-pixel fit scaling, single game script tag, links row (author / GitHub / SourceForge), and the `debug_webui.js` tag |
+| `index.html`        | —                       | page: canvas, 1 px grey border, integer-pixel fit scaling, single game script tag, links row (globe + author / "web source" + GitHub / "source" + SourceForge), and the `debug_webui.js` tag |
 | `favicon.ico`, `icon.png` | — | page favicon: the player-ship sprite (`images/player1.xpm`, frame 1) at 16/32/48/64 px (`.ico`) and 512 px (`.png`), nearest-neighbor scaled, transparency kept; the original X11 build sets no window icon, so this sprite is the game's canonical icon |
 | `config.h`          | `./configure` output    | hand-written build configuration (window size, score file paths, etc.) |
 | `CREDITS`           | `CREDITS` (in the game tree) | the scroll-credits text (identical copy), embedded at build time at `/tmp/xgal_credits` |

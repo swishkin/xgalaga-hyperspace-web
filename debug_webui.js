@@ -172,7 +172,7 @@
                  M._xgal_web_debug_set_shields(parseInt(sdIn.value, 10) || 0);
              })]);
 
-        var spIn = numInput("xgd-in-speed", 0, 4, 0);
+        var spIn = numInput("xgd-in-speed", 0, 5, 0);
         row([label("Speed prizes:"), spIn,
              button("xgd-setsp", "Set", function () {
                  M._xgal_web_debug_set_speed(parseInt(spIn.value, 10) || 0);
