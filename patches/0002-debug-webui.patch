@@ -1,6 +1,35 @@
-diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/main.c /tmp/xgal-hud/xgalaga-2.1.1.0/main.c
---- a/xgalaga-2.1.1.0/main.c
-+++ b/xgalaga-2.1.1.0/main.c
+diff -r base/xgalaga-2.1.1.0/highscore.c new/xgalaga-2.1.1.0/highscore.c
+--- base/xgalaga-2.1.1.0/highscore.c	2026-10-16 19:23:36.029211546 -0500
++++ new/xgalaga-2.1.1.0/highscore.c	2026-10-18 01:33:09.034672118 -0500
+@@ -68,8 +68,11 @@
+ 
+ void undo_name()
+ {
+-    W_ClearArea(baseWin, 
+-		WINWIDTH/2-(20*W_Textwidth), 250,
++    /* 20 px above the original position: the keyboard-controls list on
++     * the web build is drawn 16 px higher than in the original (and a
++     * couple of px more), which put the prompt on top of it. */
++    W_ClearArea(baseWin,
++		WINWIDTH/2-(20*W_Textwidth), 230,
+ 		(40*W_Textwidth), W_Textheight*2);
+ }
+ 
+@@ -83,9 +86,9 @@
+ 	nnpos = strlen(new_name);
+ 	init = 1;
+     }
+-    center_text("Great score! Enter your name:", 250, W_Red);
++    center_text("Great score! Enter your name:", 230, W_Red);
+     sprintf(buf, "%s_", new_name);
+-    center_text(buf, 250 + W_Textheight, W_Cyan);
++    center_text(buf, 230 + W_Textheight, W_Cyan);
+ }
+ 
+ char *getUsersFullName()
+diff -r base/xgalaga-2.1.1.0/main.c new/xgalaga-2.1.1.0/main.c
+--- base/xgalaga-2.1.1.0/main.c	2026-10-16 19:23:36.029366087 -0500
++++ new/xgalaga-2.1.1.0/main.c	2026-10-17 21:52:47.470252841 -0500
 @@ -22,6 +22,9 @@
  #include "paths.h"
  #include "proto.h"
@@ -443,10 +472,10 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/main.c /tmp/xgal-hud/xgalaga-2.1.1.0/ma
          if(gameOver) { do_title(); if(getting_name) do_name(); }
          if(paused) do_pause();
  
-diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/title.c
---- a/xgalaga-2.1.1.0/title.c
-+++ b/xgalaga-2.1.1.0/title.c
-@@ -21,8 +21,16 @@
+diff -r base/xgalaga-2.1.1.0/title.c new/xgalaga-2.1.1.0/title.c
+--- base/xgalaga-2.1.1.0/title.c	2026-10-16 19:23:36.029921784 -0500
++++ new/xgalaga-2.1.1.0/title.c	2026-10-18 01:32:10.591119778 -0500
+@@ -21,10 +21,18 @@
  
  /* for scrolling credits */
  const int LINESIZE= 70;
@@ -462,9 +491,12 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 +extern struct star stars[];  /* main.c: only needed to redraw the region bg */
 +extern struct torp *first_etorp;  /* main.c: enemy torps behind the credits */
  char *gchLBuf;
- int giCreditLines=0, giActCreditLine=0;
+-int giCreditLines=0, giActCreditLine=0;
++int giCreditLines=0;
  
-@@ -87,28 +95,124 @@
+ W_Image *pauseImage, *titleImage;
+ int pausex;
+@@ -87,28 +95,160 @@
  }
  #endif
  
@@ -477,6 +509,7 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 + * listing is drawn. */
 +#ifndef ORIGINAL_XGALAGA
 +static int help_keys[8];
++static int help_redraw = 0;
 +
 +void xgal_web_set_keymap(k0, k1, k2, k3, k4, k5, k6, k7)
 +int k0, k1, k2, k3, k4, k5, k6, k7;
@@ -489,6 +522,11 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 +    help_keys[5] = k5;
 +    help_keys[6] = k6;
 +    help_keys[7] = k7;
++    /* The keybind rows repaint onto the persistent framebuffer, so a
++     * shorter new listing would leave the tail of the old one behind
++     * until something else happened to redraw over it: force the row
++     * region to be cleared on the next draw (see show_help). */
++    help_redraw = 1;
 +}
 +
 +static void help_key_label(k, buf)
@@ -527,36 +565,57 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 +    }
 +}
 +
++/* One table row of the Keyboard controls listing.  Every row - static
++ * or keybind - uses the same layout so center_text lines up the key
++ * column and the label column across the whole list: 2-space indent,
++ * a 29-char key field (the widest possible listing is
++ * "space / shift / space / shift") and a 16-char label field. */
++static void help_row(keys, label, y, color)
++char *keys;
++char *label;
++int y;
++W_Color color;
++{
++    char line[52];
++
++    snprintf(line, sizeof(line), "  %-29s%-16s", keys, label);
++    center_text(line, y, color);
++}
++
 +/* One configurable row: kind 0 = move, 1 = fire, 2 = shield. */
 +static void help_keybind_line(kind, y, color)
 +int kind;
 +int y;
 +W_Color color;
 +{
-+    char line[64], k1[32], k2[32];
++    char k1[32], k2[32];
 +
 +    if(!help_keys[kind*2] && !help_keys[kind*2+1]) {
-+        center_text(kind == 0 ? "  j / l              move            " :
-+                    kind == 1 ? "  f                  fire            " :
-+                                "  d                  shield          ",
-+                    y, color);
++        /* no keymap synced yet: the default web bindings */
++        help_row(kind == 0 ? "j / l" : kind == 1 ? "f" : "d",
++                 kind == 0 ? "move" : kind == 1 ? "fire" : "shield",
++                 y, color);
 +        return;
 +    }
 +    if(kind == 0) {
++        char keys[48];
++
 +        help_action_keys(0, k1);
 +        help_action_keys(1, k2);
-+        snprintf(line, sizeof(line), "  %s / %s     move        ", k1, k2);
-+    } else {
-+        help_action_keys(kind == 1 ? 2 : 3, k1);
-+        snprintf(line, sizeof(line), "  %-20s %-6s ", k1,
-+                 kind == 1 ? "fire" : "shield");
++        if(k1[0] && k2[0])
++            snprintf(keys, sizeof(keys), "%s / %s", k1, k2);
++        else
++            snprintf(keys, sizeof(keys), "%s", k1[0] ? k1 : k2);
++        help_row(keys, "move", y, color);
++        return;
 +    }
-+    center_text(line, y, color);
++    help_action_keys(kind == 1 ? 2 : 3, k1);
++    help_row(k1[0] ? k1 : "-", kind == 1 ? "fire" : "shield", y, color);
 +}
 +#else
 +#define help_keybind_line(kind, y, color) \
-+    center_text((kind) ? "  f                  fire            " \
-+                       : "  j / l              move            ", (y), (color))
++    center_text((kind) ? "  space bar                    fire            " \
++                       : "  left/right arrow             move            ", (y), (color))
 +#endif /* ORIGINAL_XGALAGA */
 +
  static void show_help()
@@ -564,12 +623,21 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 -    int top = 270;
 +    /* The keybind lines are 13 rows tall (6x13 font) on a 12 px pitch:
 +     * the 1 px of margin keeps the descender of one line (j, p, q) from
-+     * touching the next line's ascenders.  top is 8 px above the former
-+     * position so the 8 px the wider pitch adds to the list's height is
-+     * taken from the empty gap under the version line, leaving the gap
-+     * to the Bonus/home lines unchanged. */
++     * touching the next line's ascenders.  top is 16 px above the
++     * original position so the extra height the wider pitch and the
++     * extra rows add is taken from the empty gap under the version
++     * line, leaving the gap to the Bonus/home lines unchanged. */
 +    int top = 254;
  
++    if(help_redraw) {
++        help_redraw = 0;
++        /* Erase the previously drawn keybind rows before redrawing: a
++         * changed binding is usually a different width, and the old
++         * glyphs sit in the persistent framebuffer (see
++         * xgal_web_set_keymap).  The live background redraws this
++         * region the same frame. */
++        W_ClearArea(baseWin, 0, top+6, WINWIDTH, 104);
++    }
      center_text("         Keyboard controls           ", top, W_Red);
 -    center_text("  j / l              move            ", top+10, W_Yellow);
 -    center_text("  f                  fire            ", top+20, W_Yellow);
@@ -580,18 +648,18 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 -    center_text("  m                  mouse control   ", top+70, W_Cyan);
 +    help_keybind_line(0, top+10, W_Yellow);
 +    help_keybind_line(1, top+22, W_Yellow);
-+    center_text("  p                  pause           ", top+34, W_Cyan);
-+    center_text("  q                  end game        ", top+46, W_Cyan);
-+    center_text("  Q                  quick quit      ", top+58, W_Cyan);
-+    center_text("  k                  keyboard control", top+70, W_Cyan);
-+    center_text("  m                  mouse control   ", top+82, W_Cyan);
++    help_row("p", "pause", top+34, W_Cyan);
++    help_row("q", "end game", top+46, W_Cyan);
++    help_row("Q", "quick quit", top+58, W_Cyan);
++    help_row("k", "keyboard control", top+70, W_Cyan);
++    help_row("m", "mouse control", top+82, W_Cyan);
  #ifndef ORIGINAL_XGALAGA
 -    center_text("  d                  shield          ", top+80, W_Cyan);
 +    help_keybind_line(2, top+94, W_Cyan);
  #endif
  #ifdef SOUND
 -    center_text("  s                  toggle sound    ", top+90, W_Cyan);
-+    center_text("  s                  toggle sound    ", top+106, W_Cyan);
++    help_row("s", "toggle sound", top+106, W_Cyan);
  #endif
 -	  
 -    center_text("Bonus ships at 20,000, 50,000, then every 50,000.", top+120, W_Green);
@@ -602,7 +670,7 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
  }
  
  int read_credits()
-@@ -176,61 +280,81 @@
+@@ -176,61 +316,92 @@
    }
  
  
@@ -630,7 +698,23 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 +    int i;
 +    int top = CREDITSTOP;
 +    int h = (VISIBLELINES+1)*W_Textheight + (W_Textheight-1);
-+
+ 
+-  if ( gchLBuf > 0 )
+-  {
+-    j = 0; lines = 0;
+-    for ( i=giActCreditLine; i<giCreditLines; i++ )
+-    {
+-      strncpy (chLBuf, gchLBuf+i*(LINESIZE+1), LINESIZE);
+-      center_text (chLBuf, top+lines*W_Textheight + ((pagetimer-1) % (W_Textheight*SPEEDFACTOR))/SPEEDFACTOR, W_Black);
+-      lines++;
+-      if ( lines > VISIBLELINES ) break;
+-    } // end for
+-  }
+-  else
+-  {
+-    snprintf (chLBuf, sizeof(chLBuf)-1, "Sorry no CREDITS data");
+-    center_text (chLBuf, top+10, W_Black);
+-  }
 +    W_ClearArea(baseWin, 0, top, WINWIDTH, h);
 +    if (wantStars)
 +        for (i = 0; i < NUMSTARS; i++)
@@ -652,23 +736,7 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 +    }
 +    for (t = first_etorp; t; t = t->next) {
 +        int tx, ty;
- 
--  if ( gchLBuf > 0 )
--  {
--    j = 0; lines = 0;
--    for ( i=giActCreditLine; i<giCreditLines; i++ )
--    {
--      strncpy (chLBuf, gchLBuf+i*(LINESIZE+1), LINESIZE);
--      center_text (chLBuf, top+lines*W_Textheight + ((pagetimer-1) % (W_Textheight*SPEEDFACTOR))/SPEEDFACTOR, W_Black);
--      lines++;
--      if ( lines > VISIBLELINES ) break;
--    } // end for
--  }
--  else
--  {
--    snprintf (chLBuf, sizeof(chLBuf)-1, "Sorry no CREDITS data");
--    center_text (chLBuf, top+10, W_Black);
--  }
++
 +        if (!t->alive)
 +            continue;
 +        tx = PX(t->x - (enemyTorp->width/2));
@@ -687,19 +755,31 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
 -  int top = 460;
 +  int i;
 +  int lines;
++  int line, off;
    char chLBuf[LINESIZE+1];
  
    if ( gchLBuf > 0 )
    {
 -    j = 0; lines = 0;
+-    for ( i=giActCreditLine; i<giCreditLines; i++ )
++    /* The scroll position comes from the global frame counter instead
++     * of pagetimer: pagetimer is reset (and the window cleared) when
++     * the title screen switches between the controls and the score
++     * pages, which made the text jump a few px down at every switch.
++     * The counter never resets, so the scroll runs on in exactly the
++     * same place on both pages.  Rate unchanged: one line every
++     * W_Textheight*SPEEDFACTOR ticks, 1 px per SPEEDFACTOR ticks. */
++    line = (counter / (W_Textheight*SPEEDFACTOR)) % (giCreditLines + 1);
++    off = (W_Textheight-1) - (counter % (W_Textheight*SPEEDFACTOR)) / SPEEDFACTOR;
++
 +    lines = 0;
 +    redraw_credits_bg();
-     for ( i=giActCreditLine; i<giCreditLines; i++ )
++    for ( i=line; i<giCreditLines; i++ )
      {
        strncpy (chLBuf, gchLBuf+i*(LINESIZE+1), LINESIZE);
 -      j = top + lines*W_Textheight + ((pagetimer-1) % (W_Textheight*SPEEDFACTOR))/SPEEDFACTOR ; 
 -      center_text (chLBuf,j, W_Green);
-+      center_text (chLBuf, CREDITSTOP+lines*W_Textheight + ((pagetimer-1) % (W_Textheight*SPEEDFACTOR))/SPEEDFACTOR, W_Green);
++      center_text (chLBuf, CREDITSTOP+lines*W_Textheight + off, W_Green);
        lines++;
        if ( lines > VISIBLELINES ) break;
      } // end for
@@ -719,15 +799,24 @@ diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/t
    }
  }
  
-@@ -267,7 +391,6 @@
+@@ -267,16 +438,7 @@
      }
  
  
 -    undo_credits();     // erase with painting black
      pagetimer--;
- //    if (!(pagetimer % 50))
-     if (!(pagetimer % (W_Textheight*SPEEDFACTOR)))
-@@ -285,18 +408,9 @@
+-//    if (!(pagetimer % 50))
+-    if (!(pagetimer % (W_Textheight*SPEEDFACTOR)))
+-    {
+-//printf("%d %d %25s\n", pagetimer, (pagetimer % (W_Textheight*SPEEDFACTOR)),  gchLBuf+giActCreditLine*(LINESIZE+1));
+-      giActCreditLine++;
+-      if (giActCreditLine > giCreditLines)
+-        giActCreditLine = 0; 
+-    } 
+     if (!pagetimer) 
+     {
+ 	W_ClearWindow(baseWin);
+@@ -285,18 +447,9 @@
  	  title_page = 0;
  	pagetimer = 598;   /* was 299 @ 30Hz: doubled ticks, same page time */
      }

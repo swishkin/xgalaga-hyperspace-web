@@ -33,6 +33,33 @@
         return KEY_LABEL[k] || k.toUpperCase();
     }
 
+    /* Keys bound to more than one action (e.g. the same letter as
+     * shield and as a move key).  Space always fires in webglue, so it
+     * is also implicitly bound to "fire". */
+    function conflictInfo(km) {
+        var map = {};
+        function add(k, a) {
+            if (!k) return;
+            if (!map[k]) map[k] = [];
+            if (map[k].indexOf(a) < 0) map[k].push(a);
+        }
+        for (var i = 0; i < ACTIONS.length; i++) {
+            var a = ACTIONS[i].id, b = km[a];
+            for (var j = 0; j < b.length; j++) add(b[j], a);
+        }
+        add(" ", "fire");
+        var list = [];
+        for (var k in map)
+            if (map[k].length > 1) list.push(k);
+        return { list: list, map: map };
+    }
+
+    function actionLabel(id) {
+        for (var i = 0; i < ACTIONS.length; i++)
+            if (ACTIONS[i].id === id) return ACTIONS[i].label;
+        return id;
+    }
+
     /* --- styles ----------------------------------------------------------- */
 
     var css = document.createElement("style");
@@ -64,6 +91,10 @@
         "#xgal-keyset .slot:hover{color:#fff;border-color:#888}" +
         "#xgal-keyset .slot.empty{border-style:dashed;color:#555}" +
         "#xgal-keyset .slot.capturing{color:#ff0;border-color:#ff0}" +
+        "#xgal-keyset .slot.conflict{color:#f66;border-color:#f44}" +
+        "#xgal-keyset .slot.conflict:hover{color:#faa;border-color:#f66}" +
+        "#xgal-keyset .conflict-note{display:none;color:#f88;font-size:11px;" +
+        "margin:6px 0 0}" +
         "#xgal-keyset .clear{background:none;border:none;color:#555;cursor:" +
         "pointer;font:12px monospace;padding:0 2px}" +
         "#xgal-keyset .clear:hover{color:#fff}" +
@@ -98,23 +129,46 @@
 
     var overlay = null;
     var slotEls = {};   /* action -> [slot0 el, slot1 el, clear el] */
+    var conflictNote = null;
 
     function render() {
         if (!overlay) return;
         var km = X.keymap();
+        var ci = conflictInfo(km);
+        var conflictSet = {};
+        for (var c = 0; c < ci.list.length; c++)
+            conflictSet[ci.list[c]] = true;
         for (var i = 0; i < ACTIONS.length; i++) {
             var a = ACTIONS[i], b = km[a.id];
             var els = slotEls[a.id];
             els[0].textContent = keyLabel(b[0]);
-            els[0].className = "slot";
+            els[0].className = "slot" + (conflictSet[b[0]] ? " conflict" : "");
             if (b.length > 1) {
                 els[1].textContent = keyLabel(b[1]);
-                els[1].className = "slot";
+                els[1].className = "slot" + (conflictSet[b[1]] ? " conflict" : "");
                 els[2].style.display = "";
             } else {
                 els[1].textContent = "add key";
                 els[1].className = "slot empty";
                 els[2].style.display = "none";
+            }
+        }
+        if (conflictNote) {
+            if (ci.list.length) {
+                var parts = [];
+                for (var d = 0; d < ci.list.length; d++) {
+                    var k = ci.list[d];
+                    parts.push(keyLabel(k) + " is bound to " +
+                        ci.map[k].map(actionLabel).join(" and "));
+                }
+                conflictNote.textContent =
+                    "Conflicting keybinds: " + parts.join("; ") +
+                    ". A press of a conflicting key triggers every " +
+                    "action it is bound to.";
+                conflictNote.style.display = "";
+            } else {
+                conflictNote.textContent = "";
+                conflictNote.style.display = "none";
             }
         }
     }
@@ -199,6 +253,10 @@
 
         for (var i = 0; i < ACTIONS.length; i++)
             box.appendChild(slotRow(ACTIONS[i]));
+
+        conflictNote = document.createElement("div");
+        conflictNote.className = "conflict-note";
+        box.appendChild(conflictNote);
 
         var hint = document.createElement("div");
         hint.className = "hint";
