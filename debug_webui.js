@@ -1,7 +1,9 @@
 /* debug_webui.js — in-browser debug panel for the xgalaga-hyperspace web
  * build.
  *
- * Shown only when debug mode is enabled:
+ * Shown only in bundles built with XGAL_DEBUG_PANEL=true (build.sh
+ * compiles the C bridge in; without it this file is a no-op), and then
+ * enabled by either:
  *   - the page sets window.XGAL_DEBUG_WEBUI = true (see index.html), or
  *   - the URL contains ?debug
  *
@@ -107,7 +109,8 @@
             i.max = max;
             i.value = value;
             i.style.cssText = "width:48px;background:#000;color:#9f9;" +
-                              "border:1px solid #444;font:12px monospace";
+                              "border:1px solid #444;font:12px monospace;" +
+                              "text-align:right";
             return i;
         }
         function button(id, label, handler) {
@@ -148,7 +151,7 @@
             wsel.appendChild(o);
         }
         wsel.style.cssText = "background:#000;color:#9f9;border:1px solid #444;" +
-                             "font:12px monospace";
+                             "font:12px monospace;text-align:right";
         wsel.addEventListener("change", function () {
             M._xgal_web_debug_set_weapon(parseInt(wsel.value, 10));
         });
@@ -276,7 +279,7 @@
         if (document.activeElement !== sdIn)
             sdIn.value = shieldIcons(s[9]);
         if (document.activeElement !== spIn)
-            spIn.value = Math.min(4, Math.max(0, Math.floor(s[8] / 2 - 1)));
+            spIn.value = Math.min(5, Math.max(0, s[8] - 3));
         if (document.activeElement !== lvlIn)
             lvlIn.value = s[16];
         pauseBtn.textContent = s[11] ? "Resume" : "Pause";
@@ -288,6 +291,10 @@
     /* --- wait for the emscripten module ---------------------------------- */
 
     (function wait() {
+        /* The module is up but was built without the debug bridge
+         * (no XGAL_DEBUG_PANEL=true): no panel, and ?debug does nothing. */
+        if (M && M._main && !M._xgal_web_debug_state)
+            return;
         if (moduleReady())
             buildPanel();
         else

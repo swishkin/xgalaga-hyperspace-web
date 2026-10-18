@@ -24,9 +24,10 @@ python3 -m http.server 8080
 # then open http://localhost:8080/
 ```
 
-The build is a single self-contained `xgalaga.js` (WebAssembly + all level
-files + sound samples + the `webglue.js` input bridge inlined), so no other
-assets are fetched.  The canvas is scaled to an **integer** number of pixels
+The game is a single self-contained `xgalaga.js` (WebAssembly + all level
+files + sound samples + the `webglue.js` input bridge inlined); the page
+adds two small UI scripts (`settings_ui.js`, `debug_webui.js`) — nothing
+else is fetched.  The canvas is scaled to an **integer** number of pixels
 by default (the native screen is 468×596), so sprites and text stay crisp
 instead of being blurred by fractional stretching; a 1 px grey (`#808080`)
 border frames the game so its edges are visible against the black page.
@@ -50,6 +51,20 @@ mouse); mouse control is available via `m`.
 | `q` / `Q` (title screen)       | quit the game                              |
 | `Enter` (title screen)         | start a game                               |
 
+The four game actions (move left, move right, fire, shield) are
+**user-customizable** — the table above shows the defaults.  The gear
+icon at the right end of the links row (under the game screen) opens a
+key-settings popup:
+
+- each action takes **one or two single keys** — any letter, number,
+  arrow key, space, shift or control; key *combinations* are never
+  accepted (one keypress always does one thing);
+- one-click presets: `wasd` (a / d / Space / x), `←→` (arrow keys /
+  Space / x — the original X11 controls) and `ijkl` (j / l / f / d);
+- the keymap is stored in the browser's localStorage
+  (`xgal-keymap-v1`) and survives page reloads; clearing site data
+  restores the defaults.
+
 Notes:
 
 - A mouse click, or `k`/`m`, on the title screen starts a game.
@@ -65,13 +80,21 @@ Notes:
 ## Debug panel
 
 For tuning and testing, the page can show a debug panel with live
-game-state readouts and in-game setters.  It is **off by default**; enable
-it either by appending `?debug` to the page URL, or by uncommenting this
-line in `index.html` (next to `XGAL_LEADERBOARD_URL`):
+game-state readouts and in-game setters.  The panel is **not in the
+committed bundle**: it only exists in builds made with
+`XGAL_DEBUG_PANEL=true ./build.sh` (that flag compiles the C bridge in and
+exports the `xgal_web_debug_*` symbols — see [Building](#building)).  In a
+panel build, enable the panel either by appending `?debug` to the page URL
+or by uncommenting this line in `index.html` (next to
+`XGAL_LEADERBOARD_URL`):
 
 ```js
 window.XGAL_DEBUG_WEBUI = true;
 ```
+
+In a build without the flag, `?debug` (and `debug_webui.js`) are
+no-ops: the panel simply never appears and the page behaves exactly as
+before.
 
 With the panel enabled it appears to the right of the canvas:
 
@@ -92,8 +115,10 @@ With the panel enabled it appears to the right of the canvas:
   pickup.
 
 The panel's C side (`xgal_web_debug_state()` plus the
-`xgal_web_debug_set_*` setters, in `main.c`) is `#ifndef ORIGINAL_XGALAGA`
-gated, so it compiles out of native builds.
+`xgal_web_debug_set_*` setters, in `main.c`) is
+`#ifdef XGAL_DEBUG_WEBUI` gated, so it is compiled out unless
+`build.sh` is run with `XGAL_DEBUG_PANEL=true` (it also compiles out of
+native builds).
 
 ## Repository layout
 
@@ -106,11 +131,14 @@ gated, so it compiles out of native builds.
   in the game lives in [`patches/`](patches/) —
   [`0001-web-port.patch`](patches/0001-web-port.patch) (the port itself) and
   [`0002-debug-webui.patch`](patches/0002-debug-webui.patch) (the equipment
-  indicator HUD and the debug panel's C bridge) — and is applied to a
+  indicator HUD, the title-screen layout — keybind list, credits
+  scroll-over-background, one-line control hint — and the debug
+  panel's C bridge, `main.c` + `title.c`) — and is applied to a
   throwaway copy at build time (see [Building](#building) and
   [Differences from upstream](#differences-from-upstream-2110)).
 - repo root — the web layer: `build.sh`, `index.html`, the built
-  `xgalaga.js`, `webglue.js` (input/audio bridge), `debug_webui.js`
+  `xgalaga.js`, `webglue.js` (input/audio bridge, user keymap),
+  `settings_ui.js` (key-settings gear + popup), `debug_webui.js`
   (optional debug panel), the Wlib/sound/frate backends
   (`wlib_web.c`, `sound_web.c`, `frate_web.c`, `joystick_web.c`,
   `leaderboard_web.c`), the leaderboard server `leaderboard.py`,
@@ -137,7 +165,7 @@ Requirements: Emscripten (emsdk) on `$HOME/emsdk`, `python3`, and `patch`.
 3. compiles the staged game sources with the web backends:
 
    ```
-   emcc -O2 -UORIGINAL_XGALAGA -I. -I<stage>/xgalaga-2.1.1.0 \
+   emcc -O2 -UORIGINAL_XGALAGA [$DEBUG_DEFINE] -I. -I<stage>/xgalaga-2.1.1.0 \
        <stage>/xgalaga-2.1.1.0/main.c ... wlib_web.c sound_web.c frate_web.c \
        joystick_web.c leaderboard_web.c \
        --embed-file <stage>/xgalaga-2.1.1.0/levels@/levels \
@@ -146,14 +174,16 @@ Requirements: Emscripten (emsdk) on `$HOME/emsdk`, `python3`, and `patch`.
        -s SINGLE_FILE=1 \
        -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] \
        -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh', \
-           '_xgal_web_getting_name','_xgal_web_debug_state', \
-           '_xgal_web_debug_set_start_level','_xgal_web_debug_start_game', \
-           '_xgal_web_debug_set_weapon','_xgal_web_debug_set_maxtorps', \
-           '_xgal_web_debug_set_ships','_xgal_web_debug_set_shields', \
-           '_xgal_web_debug_set_speed','_xgal_web_debug_set_paused', \
-           '_malloc'] \
+           '_xgal_web_getting_name'$DEBUG_EXPORTS,'_malloc'] \
        -o xgalaga.js
    ```
+
+   `build.sh` honors one build-time environment variable:
+   `XGAL_DEBUG_PANEL=true` sets `$DEBUG_DEFINE` to
+   `-DXGAL_DEBUG_WEBUI` (compiling the debug panel's C bridge in) and
+   `$DEBUG_EXPORTS` to the nine `_xgal_web_debug_*` exports; without it
+   both are empty and the shipped bundle has no debug panel at all (see
+   [Debug panel](#debug-panel)).
 
    `-UORIGINAL_XGALAGA` selects the **hyperspace** variant (shield, extra
    weapons).  The blocking game loop yields to the browser's event loop
@@ -196,10 +226,10 @@ original highlight color (`W_DarkGrey`, solid yellow in this game's palette).
   the page's in-memory filesystem and resets on page reload; the shared
   board is the persistent one.
 
-Name entry passes literal keystrokes: the game-control remaps
-(`f` = fire, `d` = shield, `j`/`l` = move, arrows) are disabled while the
-name prompt is up, so typing e.g. `FRED` stores `fred`, not fire/shield key
-codes.
+Name entry passes literal keystrokes: the game-action keys (move left /
+right, fire, shield — whatever the user's keymap assigns to them) are
+disabled while the name prompt is up, so typing e.g. `FRED` stores `fred`,
+not fire/shield key codes.
 
 ## Deploying with Docker
 
@@ -219,7 +249,7 @@ the `./data` bind mount,
 which must be writable by uid 65534 (the `nobody` user the server runs
 as; `chmod 777 data` works for a single-user machine).  The server's code
 lives outside the served directory, so the public endpoint can only serve
-`index.html`, `debug_webui.js` and `xgalaga.js`.
+`index.html`, `debug_webui.js`, `settings_ui.js` and `xgalaga.js`.
 
 ## Security
 
@@ -228,10 +258,13 @@ lives outside the served directory, so the public endpoint can only serve
 canvas glyphs, so a malicious board entry (a name containing HTML or JS)
 cannot execute code in a player's browser.  The optional debug panel
 (`debug_webui.js`, inactive unless enabled as above) builds a fixed DOM
-from string constants only.  There are no cookies or localStorage (no
-stored state, no CSRF surface), and the only network request the page
-makes is the `fetch` to the leaderboard URL configured in `index.html`
-(deploy-controlled, not user-controllable).
+from string constants only.  The only client-side state is the user's
+keymap, stored in localStorage (`xgal-keymap-v1`, set by the page's own
+scripts only — never parsed from network data) and used only to map
+keystrokes to game actions; there are no cookies, so no CSRF surface,
+and the only network request the page makes is the `fetch` to the
+leaderboard URL configured in `index.html` (deploy-controlled, not
+user-controllable).
 
 **Leaderboard API** — unauthenticated by design: players can't hold a
 secret, the game code is public.  Mitigations in `leaderboard.py`:
@@ -262,9 +295,11 @@ with `XGAL_ORIGIN` set to the game's public origin.
 ## Differences from upstream 2.1.1.0
 
 The port itself lives in `patches/0001-web-port.patch` (1336 lines, 13
-files); the equipment-indicator HUD and the debug panel's C bridge live in
-`patches/0002-debug-webui.patch` (`main.c` only).  Both are applied, in
-order, to a throwaway copy of the tree at build time.
+files); the equipment-indicator HUD, the title-screen layout (keybind
+list pitch, credits scroll over the live background, one-line control
+hint) and the debug panel's C bridge live in
+`patches/0002-debug-webui.patch` (`main.c` + `title.c`).  Both are
+applied, in order, to a throwaway copy of the tree at build time.
 
 ### Gameplay: per-level MINTORPS floors
 
@@ -337,32 +372,40 @@ started immediately).
 - The equipment indicators sit on the score row (the shell window's top
   line, the same row as the "Score:" / "Level:" text and the ship icons),
   right-aligned in the space the upstream game leaves vacant there: the
-  speed prize taken (each prize steps the ship speed by 0.5, from 1.5 to
-  4.0, so at most 5 icons), with 3 px between the sections.  The position
-  the group does not shift as the shield bar to its lower right grows or
-  shrinks.  The icons are generated into `hudicons.h` by `mkhudicons.py`
-  from the prize sprites and drawn in each pill's primary color (single =
-  yellow pill, double = teal, triple = cyan, spread = blue, machine =
-  red); the speed icon is the red zigzag of the speed pill cropped to the
-  lightning bolt, drawn in the pill's yellow.  The group is redrawn every
-  frame after `do_score()`, which clears the whole row whenever the score,
-  level or ship count changes.
+  current weapon icon, the min-torp count, and — when at least one speed
+  prize has been taken — the speed icon plus the prize count (each prize
+  steps the ship speed by 0.5, from 1.5 to 4.0, so at most 5; one icon
+  and a number, no stacked icons), with 3 px between the sections.  The
+  position the group does not shift as the shield bar to its lower right
+  grows or shrinks.  The icons are generated into `hudicons.h` by
+  `mkhudicons.py` from the prize sprites and drawn in each pill's primary
+  color (single = yellow pill, double = teal, triple = cyan, spread =
+  blue, machine = red); the speed icon is the red zigzag of the speed
+  pill cropped to the lightning bolt, drawn in the pill's yellow.  The
+  group is redrawn every frame after `do_score()`, which clears the whole
+  row whenever the score, level or ship count changes.
 
 ### Input
 
-- Keyboard control is the default and home-row keybinds
-  `j`/`l`/`f`/`d` map to left/right/fire/shield (the original defaulted to
-  mouse capture on the title screen).
+- Keyboard control is the default.  The four game actions are
+  user-customizable (see [Controls](#controls)): `webglue.js` keeps the
+  keymap in localStorage and maps whatever keys the user has assigned to
+  the four internal control codes the C side expects (ctrl-b / ctrl-f /
+  space / `x`).  The defaults are home-row `j`/`l`/`f`/`d` plus the
+  arrow keys for movement.
 - Browsers stop delivering `keyup` once the page loses focus, which left
   the C-side key state (`static keys` in `do_player`) holding a movement
   key — the rare "J gets stuck" drift.  `webglue.js` synthesizes releases
-  for the game-control keys (ctrl-b, ctrl-f, space, `x`) on `blur` and
-  `visibilitychange`, and `do_player` resets `keys` when a new game starts
-  so a key released during the game-over screen can't leak into the next
-  game.
+  for the four internal control codes on `blur` and `visibilitychange`,
+  and `do_player` resets `keys` when a new game starts so a key released
+  during the game-over screen can't leak into the next game.
 - `title.c` carries two cosmetic build fixes (`const int` for auto-typedefs
-  on modern compilers, an explicit `<unistd.h>` include) and a redraw-order
-  fix so the bottom control hint isn't erased by the scrolling credits.
+  on modern compilers, an explicit `<unistd.h>` include) and layout
+  changes: the keyboard-control list gets a 12 px line pitch (the 11 px
+  original left the `f` and `j` glyphs touching), the scroll credits are
+  redrawn each frame *over the live star field and aliens* instead of on
+  a black band, and the bottom control hint is one line
+  (`[k]eyboard or [m]ouse control, [q]uit`) instead of two.
 
 ### Fidelity notes
 

@@ -28,6 +28,7 @@ COPY leaderboard.py ./
 COPY index.html ./www/
 COPY xgalaga.js ./www/
 COPY debug_webui.js ./www/
+COPY settings_ui.js ./www/
 COPY favicon.ico ./www/
 COPY icon.png ./www/
 

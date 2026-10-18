@@ -31,6 +31,16 @@ cp -r "$GAME" "$STAGE/$GAME"
 # Generated data (kept in the tree; regenerated on each build)
 python3 mksounddata.py sounddata.h
 
+# Debug panel (debug_webui.js + the xgal_web_debug_* C bridge in main.c):
+# opt-in, so the shipped game cannot be used to farm scores with the
+# powerup setters.  Build with:  XGAL_DEBUG_PANEL=true ./build.sh
+DEBUG_DEFINE=
+DEBUG_EXPORTS=
+if [ "${XGAL_DEBUG_PANEL:-}" = "true" ]; then
+    DEBUG_DEFINE="-DXGAL_DEBUG_WEBUI"
+    DEBUG_EXPORTS=",'_xgal_web_debug_state','_xgal_web_debug_set_start_level','_xgal_web_debug_start_game','_xgal_web_debug_set_weapon','_xgal_web_debug_set_maxtorps','_xgal_web_debug_set_ships','_xgal_web_debug_set_shields','_xgal_web_debug_set_speed','_xgal_web_debug_set_paused'"
+fi
+
 # xgalaga-hyperspace = sources compiled WITHOUT -DORIGINAL_XGALAGA.
 # The X11 libsprite is replaced by the web backends at the repo root:
 #   wlib_web.c      Wlib windowing on an HTML canvas (framebuffer backend)
@@ -43,7 +53,7 @@ python3 mksounddata.py sounddata.h
 # via emscripten_sleep() (see frate_web.c).  EXIT_RUNTIME makes quit keys
 # (Q) freeze the page instead of navigating away.  SINGLE_FILE inlines the
 # wasm so the whole game is one .js file.
-emcc -O2 -UORIGINAL_XGALAGA \
+emcc -O2 -UORIGINAL_XGALAGA $DEBUG_DEFINE \
     -I. -I"$STAGE/$GAME" \
     "$STAGE/$GAME"/main.c "$STAGE/$GAME"/data.c "$STAGE/$GAME"/paths.c \
     "$STAGE/$GAME"/pathfile.c "$STAGE/$GAME"/title.c "$STAGE/$GAME"/explosions.c \
@@ -57,7 +67,7 @@ emcc -O2 -UORIGINAL_XGALAGA \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s SINGLE_FILE=1 \
     -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] \
-    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name','_xgal_web_debug_state','_xgal_web_debug_set_start_level','_xgal_web_debug_start_game','_xgal_web_debug_set_weapon','_xgal_web_debug_set_maxtorps','_xgal_web_debug_set_ships','_xgal_web_debug_set_shields','_xgal_web_debug_set_speed','_xgal_web_debug_set_paused','_malloc'] \
+    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name'$DEBUG_EXPORTS,'_malloc'] \
     -o xgalaga.js
 # Inline webglue.js (input bridge) at the front of the bundle: the deliverable
 # is a single file, and one script tag avoids a browser cache desync between
