@@ -1,3 +1,4 @@
+diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/main.c /tmp/xgal-hud/xgalaga-2.1.1.0/main.c
 --- a/xgalaga-2.1.1.0/main.c
 +++ b/xgalaga-2.1.1.0/main.c
 @@ -22,6 +22,9 @@
@@ -123,7 +124,21 @@
      }
      if(starspeed != 1) {
          char buf[20];
-@@ -843,6 +931,37 @@
+@@ -660,6 +748,13 @@
+             starspeed = -20;
+         } else if(starspeed == 1) {
+             init_aliens(++level);
++            {   /* the MINTORPS floor rises every 15 levels: re-apply it
++                 * under the current weapon when the level crosses a
++                 * boundary, so accumulated shots keep the raised floor */
++                int mn = weapon_mintorps(weapon, level);
++                if(maxtorps < mn)
++                    maxtorps = mn;
++            }
+             gotlemon = 0;
+             starspeed = 1;
+             numtorps=0;
+@@ -843,6 +938,37 @@
                       playerShip->width, h);
  }
  
@@ -161,7 +176,7 @@
  static void do_player(mx, my, but)
  int mx, my, but;
  {
-@@ -851,7 +970,6 @@
+@@ -851,7 +977,6 @@
      static int shotside = 0;
  #endif
      W_Event wev;
@@ -169,7 +184,7 @@
  
      if(gameOver) {
          while(W_EventsPending()) {
-@@ -906,29 +1024,7 @@
+@@ -906,29 +1031,7 @@
                  if(!getting_name) {
                      if(mouseControl)
                          W_GrabPointer(baseWin);
@@ -200,7 +215,7 @@
                  }
                  break;
              case W_EV_EXPOSE:
-@@ -950,14 +1046,14 @@
+@@ -950,14 +1053,14 @@
          case W_EV_KEY_OFF:
              switch(wev.key) {
              case 'f'+128:
@@ -218,7 +233,7 @@
                  break;
  #ifdef ACTIVATED_SHIELD
  	    case 'x':
-@@ -972,14 +1068,14 @@
+@@ -972,14 +1075,14 @@
          case W_EV_KEY:
              switch(wev.key) {
              case 'f'+128:
@@ -236,7 +251,7 @@
                  break;
              case 'k':
              case 256+'k':       //363:
-@@ -1097,14 +1193,14 @@
+@@ -1097,14 +1200,14 @@
  
          if((!mouseControl && ! js_device) ||
  	   (js_device && mx == plx && but == 0)) {
@@ -254,10 +269,35 @@
                  but = W_LBUTTON;
              else
                  but = 0;
-@@ -1260,7 +1356,138 @@
+@@ -1135,8 +1238,10 @@
+                     }
+ #else
+                     ships--;
+-                    maxtorps = MINTORPS;
+                     weapon = 0;
++                    /* the floor, not the bare MINTORPS: dying at level 16+
++                     * must not drop single-shot below the raised floor */
++                    maxtorps = weapon_mintorps(weapon, level);
+                     movespeed = MINSPEED;
+ #endif /* DISABLE_RESET_ON_DEATH */
+                     pldead = 0;
+@@ -1260,7 +1365,151 @@
      }
  }
  
++#ifndef ORIGINAL_XGALAGA
++/* Page-side pause control (the key settings popup pauses the game while
++ * it is open and does not resume it on close).  Applied only while a
++ * game is in play, so opening the popup at the title or on the game-over
++ * screen cannot leave the next game paused. */
++void xgal_web_set_paused(b)
++int b;
++{
++    if(!gameOver)
++	paused = b ? 1 : 0;
++}
++#endif /* ORIGINAL_XGALAGA */
++
 +#ifdef XGAL_DEBUG_WEBUI
 +/* --- web debug bridge ----------------------------------------------------
 + * Compiled only when build.sh is run with XGAL_DEBUG_PANEL=true (it passes
@@ -393,7 +433,7 @@
  main(argc, argv)
  int     argc;
  char  **argv;
-@@ -1402,6 +1629,9 @@
+@@ -1402,6 +1651,9 @@
          do_explosions();
   	do_stars();
          do_score();
@@ -403,23 +443,122 @@
          if(gameOver) { do_title(); if(getting_name) do_name(); }
          if(paused) do_pause();
  
+diff -ru /tmp/xgal-base2/xgalaga-2.1.1.0/title.c /tmp/xgal-hud/xgalaga-2.1.1.0/title.c
 --- a/xgalaga-2.1.1.0/title.c
 +++ b/xgalaga-2.1.1.0/title.c
-@@ -23,8 +23,12 @@
+@@ -21,8 +21,16 @@
+ 
+ /* for scrolling credits */
  const int LINESIZE= 70;
- const int VISIBLELINES=7;
+-const int VISIBLELINES=7;
++const int VISIBLELINES=6;
  const int SPEEDFACTOR=10;  /* was 5 @ 30Hz: doubled ticks for same scroll rate */
-+/* Top row of the scrolling region; the region is exactly (VISIBLELINES+1)
-+ * text rows tall, so no credit line ever extends outside it. */
-+const int CREDITSTOP= 460;
++#define CREDITSTOP 460
++/* Top row of the scrolling region.  The region is (VISIBLELINES+1) text
++ * rows plus the W_Textheight-1 px the scroll offset sweeps the bottom
++ * line below its row, so a line is always fully inside the cleared
++ * region (no smear) and the bottom line stays clear of the hint line at
++ * WINHEIGHT - W_Textheight. */
++extern struct star stars[];  /* main.c: only needed to redraw the region bg */
++extern struct torp *first_etorp;  /* main.c: enemy torps behind the credits */
  char *gchLBuf;
  int giCreditLines=0, giActCreditLine=0;
-+extern struct star stars[];  /* main.c: only needed to redraw the region bg */
  
- W_Image *pauseImage, *titleImage;
- int pausex;
-@@ -89,26 +93,32 @@
+@@ -87,28 +95,124 @@
+ }
+ #endif
  
++/* --- keybinds in the Keyboard controls listing --------------------------
++ * The move / fire / shield rows show the player-configured keybinds,
++ * pushed from webglue.js via xgal_web_set_keymap() (order: left 0/1,
++ * right 0/1, fire 0/1, shield 0/1; 0 = unset).  Key codes are printable
++ * ASCII or 256..261 for the special keys (left, right, shift, ctrl, up,
++ * down).  Until the first sync (help_keys all zero) the original fixed
++ * listing is drawn. */
++#ifndef ORIGINAL_XGALAGA
++static int help_keys[8];
++
++void xgal_web_set_keymap(k0, k1, k2, k3, k4, k5, k6, k7)
++int k0, k1, k2, k3, k4, k5, k6, k7;
++{
++    help_keys[0] = k0;
++    help_keys[1] = k1;
++    help_keys[2] = k2;
++    help_keys[3] = k3;
++    help_keys[4] = k4;
++    help_keys[5] = k5;
++    help_keys[6] = k6;
++    help_keys[7] = k7;
++}
++
++static void help_key_label(k, buf)
++int k;
++char *buf;
++{
++    switch(k) {
++    case 256: strcpy(buf, "left"); break;
++    case 257: strcpy(buf, "right"); break;
++    case 258: strcpy(buf, "shift"); break;
++    case 259: strcpy(buf, "ctrl"); break;
++    case 260: strcpy(buf, "up"); break;
++    case 261: strcpy(buf, "down"); break;
++    case ' ': strcpy(buf, "space"); break;
++    default:
++        if(k >= 32 && k <= 126) {
++            buf[0] = (char)k;
++            buf[1] = 0;
++        } else
++            buf[0] = 0;
++        break;
++    }
++}
++
++/* "a / s" style listing of the (up to two) binds of action pair i. */
++static void help_action_keys(i, buf)
++int i;
++char *buf;
++{
++    help_key_label(help_keys[i*2], buf);
++    if(help_keys[i*2+1]) {
++        char t[16];
++        help_key_label(help_keys[i*2+1], t);
++        strcat(buf, " / ");
++        strcat(buf, t);
++    }
++}
++
++/* One configurable row: kind 0 = move, 1 = fire, 2 = shield. */
++static void help_keybind_line(kind, y, color)
++int kind;
++int y;
++W_Color color;
++{
++    char line[64], k1[32], k2[32];
++
++    if(!help_keys[kind*2] && !help_keys[kind*2+1]) {
++        center_text(kind == 0 ? "  j / l              move            " :
++                    kind == 1 ? "  f                  fire            " :
++                                "  d                  shield          ",
++                    y, color);
++        return;
++    }
++    if(kind == 0) {
++        help_action_keys(0, k1);
++        help_action_keys(1, k2);
++        snprintf(line, sizeof(line), "  %s / %s     move        ", k1, k2);
++    } else {
++        help_action_keys(kind == 1 ? 2 : 3, k1);
++        snprintf(line, sizeof(line), "  %-20s %-6s ", k1,
++                 kind == 1 ? "fire" : "shield");
++    }
++    center_text(line, y, color);
++}
++#else
++#define help_keybind_line(kind, y, color) \
++    center_text((kind) ? "  f                  fire            " \
++                       : "  j / l              move            ", (y), (color))
++#endif /* ORIGINAL_XGALAGA */
++
  static void show_help()
  {
 -    int top = 270;
@@ -432,14 +571,15 @@
 +    int top = 254;
  
      center_text("         Keyboard controls           ", top, W_Red);
-     center_text("  j / l              move            ", top+10, W_Yellow);
+-    center_text("  j / l              move            ", top+10, W_Yellow);
 -    center_text("  f                  fire            ", top+20, W_Yellow);
 -    center_text("  p                  pause           ", top+30, W_Cyan);
 -    center_text("  q                  end game        ", top+40, W_Cyan);
 -    center_text("  Q                  quick quit      ", top+50, W_Cyan);
 -    center_text("  k                  keyboard control", top+60, W_Cyan);
 -    center_text("  m                  mouse control   ", top+70, W_Cyan);
-+    center_text("  f                  fire            ", top+22, W_Yellow);
++    help_keybind_line(0, top+10, W_Yellow);
++    help_keybind_line(1, top+22, W_Yellow);
 +    center_text("  p                  pause           ", top+34, W_Cyan);
 +    center_text("  q                  end game        ", top+46, W_Cyan);
 +    center_text("  Q                  quick quit      ", top+58, W_Cyan);
@@ -447,13 +587,13 @@
 +    center_text("  m                  mouse control   ", top+82, W_Cyan);
  #ifndef ORIGINAL_XGALAGA
 -    center_text("  d                  shield          ", top+80, W_Cyan);
-+    center_text("  d                  shield          ", top+94, W_Cyan);
++    help_keybind_line(2, top+94, W_Cyan);
  #endif
  #ifdef SOUND
 -    center_text("  s                  toggle sound    ", top+90, W_Cyan);
 +    center_text("  s                  toggle sound    ", top+106, W_Cyan);
  #endif
- 	  
+-	  
 -    center_text("Bonus ships at 20,000, 50,000, then every 50,000.", top+120, W_Green);
 +    center_text("Bonus ships at 20,000, 50,000, then every 50,000.", top+136, W_Green);
      center_text("XGalaga Home page: http://rumsey.org/xgal.html",
@@ -462,48 +602,35 @@
  }
  
  int read_credits()
-@@ -176,61 +186,67 @@
+@@ -176,61 +280,81 @@
    }
  
  
 -void undo_credits()
 +/* Redraw the background of the scrolling region: black space, the stars,
-+ * and the alien convoy where it passes through.  The previous mechanism
-+ * (undo_credits() painting the old text rows black, plus two full-width
-+ * black clearance bands above and below the lines) left solid black bars
-+ * over the moving background; clearing the region and redrawing what is
-+ * behind it instead keeps the stars and ships visible.  do_stars() and
-+ * do_aliens() already ran this frame, so this only redraws their pieces
-+ * that the clear removed - the rest of the screen is untouched.  The
-+ * lines never leave the region: line k sits at
-+ * CREDITSTOP + k*W_Textheight + offset with 0 <= offset < W_Textheight,
-+ * so nothing has to be clipped. */
++ * the alien convoy and the enemy torps where they pass through.  The
++ * previous mechanism (undo_credits() painting the old text rows black,
++ * plus two full-width black clearance bands above and below the lines)
++ * left solid black bars over the moving background; clearing the region
++ * and redrawing what is behind it instead keeps the stars, ships and
++ * torps visible.  do_stars(), do_aliens() and do_etorps() already ran
++ * this frame, so this only redraws their pieces that the clear removed -
++ * the rest of the screen is untouched.  The region spans the full range
++ * a line can occupy: line k sits at CREDITSTOP + k*W_Textheight + offset
++ * with 0 <= offset < W_Textheight, so the bottom line dips
++ * W_Textheight-1 px below its row (the region adds exactly that) and
++ * nothing has to be clipped. */
 +static void redraw_credits_bg()
  {
 -  int hsf;
 -  int i,j,l,lines;
 -  int top = 460;
 -  char chLBuf[LINESIZE+1];
++    struct torp *t;
 +    int i;
 +    int top = CREDITSTOP;
-+    int h = (VISIBLELINES+1)*W_Textheight;
- 
--  if ( gchLBuf > 0 )
--  {
--    j = 0; lines = 0;
--    for ( i=giActCreditLine; i<giCreditLines; i++ )
--    {
--      strncpy (chLBuf, gchLBuf+i*(LINESIZE+1), LINESIZE);
--      center_text (chLBuf, top+lines*W_Textheight + ((pagetimer-1) % (W_Textheight*SPEEDFACTOR))/SPEEDFACTOR, W_Black);
--      lines++;
--      if ( lines > VISIBLELINES ) break;
--    } // end for
--  }
--  else
--  {
--    snprintf (chLBuf, sizeof(chLBuf)-1, "Sorry no CREDITS data");
--    center_text (chLBuf, top+10, W_Black);
--  }
++    int h = (VISIBLELINES+1)*W_Textheight + (W_Textheight-1);
++
 +    W_ClearArea(baseWin, 0, top, WINWIDTH, h);
 +    if (wantStars)
 +        for (i = 0; i < NUMSTARS; i++)
@@ -522,6 +649,33 @@
 +        W_DrawImage(baseWin, ax, ay,
 +                    aliens[i].dir < 0 ? 0 : aliens[i].dir,
 +                    aliens[i].shape, W_Green);
++    }
++    for (t = first_etorp; t; t = t->next) {
++        int tx, ty;
+ 
+-  if ( gchLBuf > 0 )
+-  {
+-    j = 0; lines = 0;
+-    for ( i=giActCreditLine; i<giCreditLines; i++ )
+-    {
+-      strncpy (chLBuf, gchLBuf+i*(LINESIZE+1), LINESIZE);
+-      center_text (chLBuf, top+lines*W_Textheight + ((pagetimer-1) % (W_Textheight*SPEEDFACTOR))/SPEEDFACTOR, W_Black);
+-      lines++;
+-      if ( lines > VISIBLELINES ) break;
+-    } // end for
+-  }
+-  else
+-  {
+-    snprintf (chLBuf, sizeof(chLBuf)-1, "Sorry no CREDITS data");
+-    center_text (chLBuf, top+10, W_Black);
+-  }
++        if (!t->alive)
++            continue;
++        tx = PX(t->x - (enemyTorp->width/2));
++        ty = PX(t->y - (enemyTorp->height/2));
++        if (ty >= top + h || ty + enemyTorp->height <= top)
++            continue;
++        W_DrawImage(baseWin, tx, ty, t->frame, enemyTorp, W_Red);
 +    }
  }
  
@@ -565,7 +719,7 @@
    }
  }
  
-@@ -267,7 +283,6 @@
+@@ -267,7 +391,6 @@
      }
  
  
@@ -573,7 +727,7 @@
      pagetimer--;
  //    if (!(pagetimer % 50))
      if (!(pagetimer % (W_Textheight*SPEEDFACTOR)))
-@@ -285,18 +300,9 @@
+@@ -285,18 +408,9 @@
  	  title_page = 0;
  	pagetimer = 598;   /* was 299 @ 30Hz: doubled ticks, same page time */
      }

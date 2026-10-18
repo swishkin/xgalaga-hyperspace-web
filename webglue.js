@@ -101,9 +101,41 @@
         } catch (e) { /* private mode etc: session-only keymap */ }
     }
 
+    /* The title's Keyboard-controls screen shows the configured binds:
+     * push the keymap into C (title.c xgal_web_set_keymap) on load and
+     * on every change.  Key codes: printable ASCII, else 256..261 for
+     * the special keys (left, right, shift, ctrl, up, down). */
+    function keymapCode(k) {
+        switch (k) {
+        case "ArrowLeft": return 256;
+        case "ArrowRight": return 257;
+        case "Shift": return 258;
+        case "Control": return 259;
+        case "ArrowUp": return 260;
+        case "ArrowDown": return 261;
+        }
+        return k.charCodeAt(0);
+    }
+
+    function syncHelpKeys() {
+        try {
+            if (typeof M._xgal_web_set_keymap !== 'function')
+                return;
+            var a = [];
+            for (var i = 0; i < ACTION_ORDER.length; i++) {
+                var b = keymap[ACTION_ORDER[i]];
+                a.push(keymapCode(b[0]));
+                a.push(b.length > 1 ? keymapCode(b[1]) : 0);
+            }
+            M._xgal_web_set_keymap(a[0], a[1], a[2], a[3],
+                                   a[4], a[5], a[6], a[7]);
+        } catch (e) { /* runtime not up yet */ }
+    }
+
     function notifyKeymap() {
         for (var i = 0; i < keymapListeners.length; i++)
             keymapListeners[i](copyKeymap(keymap));
+        syncHelpKeys();
     }
 
     function setBind(action, slot, key) {
@@ -170,6 +202,28 @@
         return null;
     }
 
+    /* Release counterpart of keyAction: on keyup a bound key always maps
+     * to its action, ignoring held modifiers.  Reusing keyAction's
+     * modifier check on release would strand the C-side key state: a
+     * plain keydown sets the action bit, then a window switch (Alt-Tab)
+     * swallows the Alt release and the browser keeps reporting
+     * altKey=true on later events, so the keyup of the held movement key
+     * would fall through to its raw keyCode - which C never clears - and
+     * the ship stays pinned at the edge until the modifier state clears.
+     * Clearing a bit that is not set is a no-op, so being permissive on
+     * release is always safe. */
+    function keyActionUp(e) {
+        var k = e.key;
+        if (!k) return null;
+        if (k.length === 1) k = k.toLowerCase();
+        for (var i = 0; i < ACTION_ORDER.length; i++) {
+            var b = keymap[ACTION_ORDER[i]];
+            for (var j = 0; j < b.length; j++)
+                if (b[j] === k) return ACTION_ORDER[i];
+        }
+        return null;
+    }
+
     function passThroughCode(e) {
         var c = e.keyCode;
         if (c >= 65 && c <= 90) {            /* A-Z */
@@ -203,7 +257,7 @@
             if (c >= 37 && c <= 40) return null;
             return passThroughCode(e);
         }
-        var a = keyAction(e);
+        var a = keyActionUp(e);
         if (a) return ACTION_GAME[a];
         return passThroughCode(e);
     }
@@ -281,6 +335,15 @@
         cancelCapture: function () { capture = null; },
         captureActive: function () { return !!capture; },
         onKeymapChange: function (fn) { keymapListeners.push(fn); },
+        /* Pause from the page (key settings popup, settings_ui.js).  C
+         * applies it only while a game is in play, so opening the popup
+         * at the title cannot leave the next game paused. */
+        pauseGame: function () {
+            try {
+                if (typeof M._xgal_web_set_paused === 'function')
+                    M._xgal_web_set_paused(1);
+            } catch (e) {}
+        },
         getMouse: function () {
             return ((mouse.x & 0x3FF) << 1) |
                 ((mouse.y & 0x3FF) << 17) |
@@ -329,7 +392,10 @@
                     pushEvent(2, code, 0, 0, 0);
             });
             document.addEventListener('keyup', function (e) {
-                if (capture) return;
+                /* Releases are forwarded even while a key-settings slot is
+                 * capturing: a movement key held before the capture must
+                 * not stay held in the game after it ends (a keyup can
+                 * never be bound to a slot - only keydowns are). */
                 pushEvent(4, keyUpCode(e), 0, 0, 0);
             });
 
@@ -472,5 +538,6 @@
     M.onRuntimeInitialized = function () {
         if (typeof _origRTI === 'function') _origRTI();
         lbLoadBoard();
+        syncHelpKeys();
     };
 })();

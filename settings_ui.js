@@ -204,7 +204,9 @@
         hint.className = "hint";
         hint.textContent =
             "Click a key slot, then press the key (Esc cancels). Letters," +
-            " numbers, arrows, space, shift and ctrl. No combinations.";
+            " numbers, arrows, space, shift and ctrl. No combinations." +
+            " The game pauses while this window is open; close it and" +
+            " press [p] to resume.";
         box.appendChild(hint);
 
         overlay.appendChild(box);
@@ -219,6 +221,12 @@
     function openPopup() {
         if (X.captureActive())
             X.cancelCapture();
+        /* Pause the game while the popup is up so rebinds (and the keys
+         * pressed to make them) can never steer the ship.  No
+         * auto-unpause on close: the player resumes with the pause key
+         * when ready.  C ignores this outside a running game. */
+        if (typeof X.pauseGame === "function")
+            X.pauseGame();
         if (!overlay)
             buildOverlay();
         else

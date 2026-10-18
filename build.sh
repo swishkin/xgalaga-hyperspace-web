@@ -67,7 +67,7 @@ emcc -O2 -UORIGINAL_XGALAGA $DEBUG_DEFINE \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s SINGLE_FILE=1 \
     -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] \
-    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name'$DEBUG_EXPORTS,'_malloc'] \
+    -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh','_xgal_web_getting_name','_xgal_web_set_keymap','_xgal_web_set_paused'$DEBUG_EXPORTS,'_malloc'] \
     -o xgalaga.js
 # Inline webglue.js (input bridge) at the front of the bundle: the deliverable
 # is a single file, and one script tag avoids a browser cache desync between

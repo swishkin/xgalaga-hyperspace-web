@@ -317,7 +317,8 @@ cycle repeats after 15), via `weapon_mintorps(weapon, level)` in `data.c`:
 | MACHINE | 3    | 5     | 7     | 9     | 11    |
 
 (capped at `MAXTORPS`, raised 10 → 15 to fit).  The floor is applied at
-game start, on death, on lemon, and when picking up a weapon (`prize.c`).
+game start, on every level change, on death, on lemon, and when picking
+up a weapon (`prize.c`).
 Difficulty still ramps through the enemies; this only stops firepower from
 collapsing.  More late-game tuning ideas are documented in
 [GAMEPLAY_IDEAS.md](GAMEPLAY_IDEAS.md).
