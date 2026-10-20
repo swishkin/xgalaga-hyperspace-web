@@ -198,6 +198,12 @@ with `XGAL_DEBUG_PANEL=false` (it also compiles out of native builds).
 
 Requirements: Emscripten (emsdk) on `$HOME/emsdk`, `python3`, and `patch`.
 
+`web/xgalaga.js` is committed, because the docker image build has no
+emsdk and ships the bundle as it is in the repository.  **Rebuild and
+commit the bundle together with any change to the sources it is built
+from** — the CI workflow refuses to publish an image whose bundle is
+older than its inputs (`.github/scripts/check-bundle-freshness.sh`).
+
 `build.sh`:
 
 1. stages a throwaway copy of `xgalaga-2.1.1.0/` in a temp dir and applies
