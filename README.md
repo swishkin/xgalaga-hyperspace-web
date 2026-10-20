@@ -208,8 +208,9 @@ older than its inputs (`.github/scripts/check-bundle-freshness.sh`).
 
 1. stages a throwaway copy of `xgalaga-2.1.1.0/` in a temp dir and applies
    `patches/0001-web-port.patch`, `patches/0002-debug-webui.patch`,
-   `patches/0003-score-name-terminator.patch` and then
-   `patches/0004-new-game-unpaused.patch`
+   `patches/0003-score-name-terminator.patch`,
+   `patches/0004-new-game-unpaused.patch` and then
+   `patches/0005-speed-icon-always-visible.patch`
    to that copy (the pristine tree is never touched),
 2. regenerates `sounddata.h` from `xgalaga-2.1.1.0/sounds/*.raw`
    (`mksounddata.py`; `bigfontdata.h` is static),
@@ -375,9 +376,11 @@ list pitch, credits scroll over the live background, one-line control
 hint) and the debug panel's C bridge live in
 `patches/0002-debug-webui.patch` (`main.c` + `title.c`); the score
 record's name-field terminator lives in
-`patches/0003-score-name-terminator.patch` (`highscore.c`); and the
+`patches/0003-score-name-terminator.patch` (`highscore.c`); the
 "a new game always starts unpaused" fix lives in
-`patches/0004-new-game-unpaused.patch` (`main.c`).  All four are
+`patches/0004-new-game-unpaused.patch` (`main.c`); and the always-visible
+speed indicator lives in
+`patches/0005-speed-icon-always-visible.patch` (`main.c`).  All five are
 applied, in order, to a throwaway copy of the tree at build time.
 
 ### Gameplay: per-level MINTORPS floors
@@ -452,10 +455,12 @@ started immediately).
 - The equipment indicators sit on the score row (the shell window's top
   line, the same row as the "Score:" / "Level:" text and the ship icons),
   right-aligned in the space the upstream game leaves vacant there: the
-  current weapon icon, the min-torp count, and — when at least one speed
-  prize has been taken — the speed icon plus the prize count (each prize
-  steps the ship speed by 0.5, from 1.5 to 4.0, so at most 5; one icon
-  and a number, no stacked icons), with 3 px between the sections.  The
+  current weapon icon, the min-torp count, and the speed icon plus the
+  prize count (each prize steps the ship speed by 0.5, from 1.5 to 4.0, so
+  at most 5; one icon and a number, no stacked icons), with 3 px between
+  the sections.  The speed icon is always drawn, so the count reads 0
+  before the first speed prize instead of the icon simply not being
+  there.  The
   position the group does not shift as the shield bar to its lower right
   grows or shrinks.  The icons are generated into `hudicons.h` by
   `mkhudicons.py` from the prize sprites and drawn in each pill's primary

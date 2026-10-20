@@ -1,0 +1,52 @@
+diff -r base/xgalaga-2.1.1.0/main.c new/xgalaga-2.1.1.0/main.c
+--- base/xgalaga-2.1.1.0/main.c
++++ new/xgalaga-2.1.1.0/main.c
+@@ -230,7 +230,9 @@
+     /* Each speed prize steps movespeed by 0.5 (prize.c): MINSPEED 1.5 to
+      * MAXSPEED 4.0 is 6 levels, i.e. 0..5 prizes.  Every level is exactly
+      * representable in binary, so this count is exact.  Shown as one
+-     * speed icon plus the count, like the min-torp readout. */
++     * speed icon plus the count, like the min-torp readout - and always
++     * shown, so the count reads 0 before the first speed prize instead
++     * of the icon simply not being there. */
+     int nspeed = (int)((movespeed - MINSPEED) * 2.0f + 0.5f);
+     int maxnspeed = (int)((MAXSPEED - MINSPEED) * 2.0f + 0.5f);
+     int right = WINWIDTH - 2;
+@@ -244,14 +246,12 @@
+ 
+     sprintf(buf, "%d", maxtorps);
+     tw = W_StringWidth(buf, W_RegularFont);
+-    total = xgal_icon_weapon[weapon].w + 3 + tw + 3;
+-    if(nspeed > 0) {
+-	sprintf(sbuf, "%d", nspeed);
+-	stw = W_StringWidth(sbuf, W_RegularFont);
+-	total += xgal_icon_speed.w + 3 + stw;
+-    }
+-    /* Fixed box (worst case: 11px weapon icon + 3 + 2 digits + 3 + 6px
+-     * speed icon + 3 + 1 digit = 44px): the group's left edge moves as
++    sprintf(sbuf, "%d", nspeed);
++    stw = W_StringWidth(sbuf, W_RegularFont);
++    total = xgal_icon_weapon[weapon].w + 3 + tw + 3 +
++	    xgal_icon_speed.w + 3 + stw;
++    /* Fixed box (worst case: 11px weapon icon + 3 + 2 digits + 3 + 5px
++     * speed icon + 3 + 1 digit = 43px): the group's left edge moves as
+      * its width changes, so a size-tracked clear would leave ghost
+      * pixels. */
+     W_ClearArea(shellWin, right - 48, 0, 48, W_Textheight);
+@@ -261,12 +261,10 @@
+     x += xgal_icon_weapon[weapon].w + 3;
+     W_MaskText(shellWin, x, 0, W_White, buf, strlen(buf), W_RegularFont);
+     x += tw + 3;
+-    if(nspeed > 0) {
+-	draw_hud_icon(shellWin, x, (W_Textheight - xgal_icon_speed.h) / 2,
+-		      &xgal_icon_speed);
+-	x += xgal_icon_speed.w + 3;
+-	W_MaskText(shellWin, x, 0, W_White, sbuf, strlen(sbuf), W_RegularFont);
+-    }
++    draw_hud_icon(shellWin, x, (W_Textheight - xgal_icon_speed.h) / 2,
++		  &xgal_icon_speed);
++    x += xgal_icon_speed.w + 3;
++    W_MaskText(shellWin, x, 0, W_White, sbuf, strlen(sbuf), W_RegularFont);
+ }
+ #endif /* ORIGINAL_XGALAGA */
+ 

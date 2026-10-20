@@ -12,8 +12,10 @@
 # (60 Hz retime, MINTORPS floors, web input fixes),
 # patches/0002-debug-webui.patch (in-game equipment indicators, debug panel
 # C bridge), patches/0003-score-name-terminator.patch (NUL-terminate the
-# score-record name field) and patches/0004-new-game-unpaused.patch (a new
-# game always starts unpaused) to that copy.
+# score-record name field), patches/0004-new-game-unpaused.patch (a new
+# game always starts unpaused) and
+# patches/0005-speed-icon-always-visible.patch (the speed HUD icon is
+# always drawn, showing the count even when it is zero) to that copy.
 #
 # Requires: emsdk on $HOME/emsdk, python3, and a working `patch`.
 # The bitmap font (fontdata.h) is static: it is the classic X 6x13 core
@@ -33,7 +35,8 @@ cp -r "$GAME" "$STAGE/$GAME"
 ( cd "$STAGE" && patch -p1 -s < "$REPO/patches/0001-web-port.patch" && \
   patch -p1 -s < "$REPO/patches/0002-debug-webui.patch" && \
   patch -p1 -s < "$REPO/patches/0003-score-name-terminator.patch" && \
-  patch -p1 -s < "$REPO/patches/0004-new-game-unpaused.patch" )
+  patch -p1 -s < "$REPO/patches/0004-new-game-unpaused.patch" && \
+  patch -p1 -s < "$REPO/patches/0005-speed-icon-always-visible.patch" )
 
 # Generated data (kept in the tree; regenerated on each build)
 python3 mksounddata.py sounddata.h
