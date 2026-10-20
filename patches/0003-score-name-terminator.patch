@@ -1,0 +1,36 @@
+diff -r base/xgalaga-2.1.1.0/highscore.c new/xgalaga-2.1.1.0/highscore.c
+--- base/xgalaga-2.1.1.0/highscore.c
++++ new/xgalaga-2.1.1.0/highscore.c
+@@ -399,7 +399,11 @@
+     W_MakeLine(baseWin, WINWIDTH/2-((strlen(buf)*W_Textwidth)/2), 111,
+ 	       WINWIDTH/2 + ((strlen(buf)*W_Textwidth)/2), 111, W_Red);
+     for(i=0;i<n;i++) {
+-	sprintf(buf, "  %2d. %-20s     %7ld %5ld", i+1,
++	/* %.20s caps the printed length at the size of the name field, so a
++	 * record whose name is not NUL-terminated (a hand-edited score file,
++	 * or one written by an older build) cannot make printf read past the
++	 * end of the field. */
++	sprintf(buf, "  %2d. %-20.20s     %7ld %5ld", i+1,
+ 		board[i].name, board[i].score, board[i].level);
+ 	center_text(buf, 112+i*W_Textheight, (i==place ? color : W_Grey));
+     }
+@@ -431,6 +435,11 @@
+ #endif
+ 	    if(read(hsf, global_scores[i].name, 20) < 20)
+ 		goto error;
++	    /* The name field is a fixed 20-byte array; a record written by the
++	     * web build fills it with up to 19 characters plus a NUL, but a
++	     * hand-edited or older file can have 20 non-NUL bytes.  Force the
++	     * terminator so the name is always a valid C string. */
++	    global_scores[i].name[19] = 0;
+ 	    if(read(hsf, &global_scores[i].score, sizeof(long)) < sizeof(long))
+ 		goto error;
+ 	    if(read(hsf, &global_scores[i].level, sizeof(long)) < sizeof(long))
+@@ -459,6 +468,7 @@
+ 	    for(i=0;i<NUM_MY_SCORES;i++) {
+ 		if(read(hsf, my_scores[i].name, 20) < 20)
+ 		    goto error2;
++		my_scores[i].name[19] = 0;  /* see the global board above */
+ 		if(read(hsf, &my_scores[i].score, sizeof(long)) < sizeof(long))
+ 		    goto error2;
+ 		if(read(hsf, &my_scores[i].level, sizeof(long)) < sizeof(long))

@@ -2,9 +2,11 @@
 *
 .env
 !leaderboard.py
-!index.html
-!debug_webui.js
-!settings_ui.js
-!xgalaga.js
-!favicon.ico
-!icon.png
+!web/
+web/*
+!web/index.html
+!web/xgalaga.js
+!web/debug_webui.js
+!web/settings_ui.js
+!web/favicon.ico
+!web/icon.png

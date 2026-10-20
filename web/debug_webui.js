@@ -1,24 +1,31 @@
 /* debug_webui.js — in-browser debug panel for the xgalaga-hyperspace web
  * build.
  *
- * Shown only in bundles built with XGAL_DEBUG_PANEL=true (build.sh
- * compiles the C bridge in; without it this file is a no-op), and then
- * enabled by either:
- *   - the page sets window.XGAL_DEBUG_WEBUI = true (see index.html), or
- *   - the URL contains ?debug
- *
  * The panel (to the right of the game canvas) polls the exported C state
  * (xgal_web_debug_state) and exposes setters for: start level + new game,
  * weapon type, min torps, ships, shields, ship speed, and pause.  The
  * setters run between game-loop frames on the single emscripten thread, so
  * they work paused or unpaused.
+ *
+ * The panel's C bridge is compiled into the bundle by default (build.sh);
+ * whether the panel is SHOWN is a runtime decision taken by leaderboard.py
+ * from the XGAL_DEBUG_PANEL environment variable, which it passes to the
+ * page as window.XGAL_DEBUG_WEBUI = true|false.  An explicit value from
+ * the server always wins:
+ *   true  -> panel on
+ *   false -> panel off (?debug does NOT override this)
+ *   unset -> no server decision (page opened without leaderboard.py):
+ *            fall back to ?debug in the URL
  */
 (function () {
     "use strict";
 
     function debugEnabled() {
-        return window.XGAL_DEBUG_WEBUI === true ||
-               /[?&]debug\b/.test(location.search);
+        if (window.XGAL_DEBUG_WEBUI === true)
+            return true;
+        if (window.XGAL_DEBUG_WEBUI === false)
+            return false;
+        return /[?&]debug\b/.test(location.search);
     }
     if (!debugEnabled())
         return;
@@ -292,7 +299,8 @@
 
     (function wait() {
         /* The module is up but was built without the debug bridge
-         * (no XGAL_DEBUG_PANEL=true): no panel, and ?debug does nothing. */
+         * (build.sh run with XGAL_DEBUG_PANEL=false): no panel, and
+         * ?debug does nothing. */
         if (M && M._main && !M._xgal_web_debug_state)
             return;
         if (moduleReady())

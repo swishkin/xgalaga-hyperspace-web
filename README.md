@@ -14,15 +14,21 @@ Upstream:
 
 ## Quick start
 
-`xgalaga.js` is a committed build artifact, so no build step is needed to
-play:
+`web/xgalaga.js` is a committed build artifact, so no build step is needed
+to play:
 
 ```sh
 python3 leaderboard.py        # serves the game + shared board on :8088
-# or any static file server (the shared board stays empty):
-python3 -m http.server 8080
+# or any static file server rooted at web/ (the shared board stays empty):
+python3 -m http.server -d web 8080
 # then open http://localhost:8080/
 ```
+
+`leaderboard.py` serves the `web/` directory, which holds **only** the
+files the browser needs (`index.html`, `xgalaga.js`, `settings_ui.js`,
+`debug_webui.js`, the two icons).  The rest of the repository — the C
+sources, the upstream tree, the patches, `.git/`, `.env` — is outside the
+served directory and is never reachable over HTTP.
 
 The game is a single self-contained `xgalaga.js` (WebAssembly + all level
 files + sound samples + the `webglue.js` input bridge inlined); the page
@@ -80,21 +86,50 @@ Notes:
 ## Debug panel
 
 For tuning and testing, the page can show a debug panel with live
-game-state readouts and in-game setters.  The panel is **not in the
-committed bundle**: it only exists in builds made with
-`XGAL_DEBUG_PANEL=true ./build.sh` (that flag compiles the C bridge in and
-exports the `xgal_web_debug_*` symbols — see [Building](#building)).  In a
-panel build, enable the panel either by appending `?debug` to the page URL
-or by uncommenting this line in `index.html` (next to
-`XGAL_LEADERBOARD_URL`):
+game-state readouts and in-game setters.
+
+The panel has **two independent switches**:
+
+| Switch | Where | Default | Effect |
+|--------|-------|---------|--------|
+| build time | `XGAL_DEBUG_PANEL=false ./build.sh` | **included** | compiles the panel's C bridge (`xgal_web_debug_*`) out of the bundle entirely |
+| run time  | `XGAL_DEBUG_PANEL=true` (environment) | **off** | shows / hides the panel on the served page |
+
+The build-time switch decides whether the panel's *code* is in the bundle;
+the run-time switch decides whether the panel is *shown*.  They are
+independent so that one artifact can serve both cases: the same
+`xgalaga.js` is used for a public deployment (panel off) and for a
+development deployment (panel on) — no rebuild needed.
+
+**Run-time switch (the usual way).**  `leaderboard.py` reads the
+`XGAL_DEBUG_PANEL` environment variable and injects the result into the
+`index.html` it serves:
+
+```sh
+XGAL_DEBUG_PANEL=true python3 leaderboard.py      # panel shown
+python3 leaderboard.py                            # panel hidden (default)
+```
+
+In docker compose, put `XGAL_DEBUG_PANEL=true` in `.env`; with `docker
+run`, pass `-e XGAL_DEBUG_PANEL=true`.  The image itself defaults to
+`XGAL_DEBUG_PANEL=false`.
+
+**Static hosting (no `leaderboard.py`).**  Nothing injects a value, so the
+page falls back to the `?debug` URL parameter, or to an explicit
+assignment in `index.html` (next to `XGAL_LEADERBOARD_URL`):
 
 ```js
 window.XGAL_DEBUG_WEBUI = true;
 ```
 
-In a build without the flag, `?debug` (and `debug_webui.js`) are
-no-ops: the panel simply never appears and the page behaves exactly as
-before.
+The precedence is: an explicit assignment in `index.html` (it runs last)
+beats the server's value, which beats the `?debug` fallback.  A page
+served by `leaderboard.py` with `XGAL_DEBUG_PANEL=false` therefore keeps
+the panel hidden even if someone appends `?debug` to the URL.
+
+> **Note.**  Anyone who can reach an enabled panel can use its setters to
+> start at any level with any equipment and farm scores on the shared
+> board.  Leave the panel off on a public deployment.
 
 With the panel enabled it appears to the right of the canvas:
 
@@ -116,9 +151,8 @@ With the panel enabled it appears to the right of the canvas:
 
 The panel's C side (`xgal_web_debug_state()` plus the
 `xgal_web_debug_set_*` setters, in `main.c`) is
-`#ifdef XGAL_DEBUG_WEBUI` gated, so it is compiled out unless
-`build.sh` is run with `XGAL_DEBUG_PANEL=true` (it also compiles out of
-native builds).
+`#ifdef XGAL_DEBUG_WEBUI` gated, so it is compiled out of a build made
+with `XGAL_DEBUG_PANEL=false` (it also compiles out of native builds).
 
 ## Repository layout
 
@@ -129,28 +163,37 @@ native builds).
   original stays referenceable at any time without redownloading it.  No
   C-side change ever lands in this tree: everything the web port changes
   in the game lives in [`patches/`](patches/) —
-  [`0001-web-port.patch`](patches/0001-web-port.patch) (the port itself) and
+  [`0001-web-port.patch`](patches/0001-web-port.patch) (the port itself),
   [`0002-debug-webui.patch`](patches/0002-debug-webui.patch) (the equipment
   indicator HUD, the title-screen layout — keybind list, credits
   scroll-over-background, one-line control hint — and the debug
-  panel's C bridge, `main.c` + `title.c`) — and is applied to a
+  panel's C bridge, `main.c` + `title.c`) and
+  [`0003-score-name-terminator.patch`](patches/0003-score-name-terminator.patch)
+  (NUL-terminate the score record's name field) and
+  [`0004-new-game-unpaused.patch`](patches/0004-new-game-unpaused.patch)
+  (a new game always starts unpaused) — and is applied to a
   throwaway copy at build time (see [Building](#building) and
   [Differences from upstream](#differences-from-upstream-2110)).
-- repo root — the web layer: `build.sh`, `index.html`, the built
-  `xgalaga.js`, `webglue.js` (input/audio bridge, user keymap),
-  `settings_ui.js` (key-settings gear + popup), `debug_webui.js`
-  (optional debug panel), the Wlib/sound/frate backends
+- `web/` — **the served directory**: exactly the files the browser
+  downloads (`index.html`, the built `xgalaga.js`, `settings_ui.js`,
+  `debug_webui.js`, `favicon.ico`, `icon.png`).  `leaderboard.py` serves
+  this directory and nothing else, so the repository, `.git/` and `.env`
+  are never reachable over HTTP.
+- repo root — everything else: `build.sh`, `webglue.js` (input/audio
+  bridge, user keymap; prepended into the bundle at build time), the
+  Wlib/sound/frate backends
   (`wlib_web.c`, `sound_web.c`, `frate_web.c`, `joystick_web.c`,
   `leaderboard_web.c`), the leaderboard server `leaderboard.py`,
   hand-written `config.h`, the `X11/Xlib.h` type stub, font/sound data
   headers and their generators, `hudicons.h` (HUD indicator icons,
-  generated by `mkhudicons.py`), `CREDITS` (scroll-credits text), and page
-  icons.
+  generated by `mkhudicons.py`), `CREDITS` (scroll-credits text), and
+  `scores.json` (the shared board — kept outside `web/` so it is not
+  downloadable as a static file).
 
 ## Building
 
 ```sh
-./build.sh          # → xgalaga.js at the repo root
+./build.sh          # → web/xgalaga.js
 ```
 
 Requirements: Emscripten (emsdk) on `$HOME/emsdk`, `python3`, and `patch`.
@@ -158,7 +201,9 @@ Requirements: Emscripten (emsdk) on `$HOME/emsdk`, `python3`, and `patch`.
 `build.sh`:
 
 1. stages a throwaway copy of `xgalaga-2.1.1.0/` in a temp dir and applies
-   `patches/0001-web-port.patch` and then `patches/0002-debug-webui.patch`
+   `patches/0001-web-port.patch`, `patches/0002-debug-webui.patch`,
+   `patches/0003-score-name-terminator.patch` and then
+   `patches/0004-new-game-unpaused.patch`
    to that copy (the pristine tree is never touched),
 2. regenerates `sounddata.h` from `xgalaga-2.1.1.0/sounds/*.raw`
    (`mksounddata.py`; `bigfontdata.h` is static),
@@ -175,15 +220,18 @@ Requirements: Emscripten (emsdk) on `$HOME/emsdk`, `python3`, and `patch`.
        -s EXPORTED_RUNTIME_METHODS=['HEAPU8'] \
        -s EXPORTED_FUNCTIONS=['_main','_xgal_web_refresh', \
            '_xgal_web_getting_name'$DEBUG_EXPORTS,'_malloc'] \
-       -o xgalaga.js
+       -o web/xgalaga.js
    ```
 
    `build.sh` honors one build-time environment variable:
-   `XGAL_DEBUG_PANEL=true` sets `$DEBUG_DEFINE` to
-   `-DXGAL_DEBUG_WEBUI` (compiling the debug panel's C bridge in) and
-   `$DEBUG_EXPORTS` to the nine `_xgal_web_debug_*` exports; without it
-   both are empty and the shipped bundle has no debug panel at all (see
-   [Debug panel](#debug-panel)).
+   `XGAL_DEBUG_PANEL=false` leaves `$DEBUG_DEFINE` and `$DEBUG_EXPORTS`
+   empty, compiling the debug panel's C bridge (`-DXGAL_DEBUG_WEBUI` plus
+   the nine `_xgal_web_debug_*` exports) out of the bundle entirely.
+   By default the bridge **is** compiled in, because whether the panel is
+   *shown* is a run-time decision taken by `leaderboard.py` from the
+   `XGAL_DEBUG_PANEL` environment variable (see
+   [Debug panel](#debug-panel)).  `XGAL_DEBUG_PANEL=true` is accepted and
+   means the same as the default.
 
    `-UORIGINAL_XGALAGA` selects the **hyperspace** variant (shield, extra
    weapons).  The blocking game loop yields to the browser's event loop
@@ -215,11 +263,12 @@ original highlight color (`W_DarkGrey`, solid yellow in this game's palette).
 
   and play at `http://localhost:8088/`.  On load the game fetches the board
   from `/scores` and renders it on the title page; when a new high score is
-  entered, it is POSTed to `/scores` and persists in `scores.json` (top 100
-  by default; edit the file to prune entries).  The API is same-origin by
+  entered, it is POSTed to `/scores` and persists in `scores.json` at the
+  repository root (top 100 by default; edit the file to prune entries —
+  the server re-reads it on every request).  The API is same-origin by
   default; if the game is served from a different origin, set
-  `window.XGAL_LEADERBOARD_URL` in `index.html`.  Without the server (e.g.
-  opening `index.html` straight from disk) the board stays empty.
+  `window.XGAL_LEADERBOARD_URL` in `web/index.html`.  Without the server
+  (e.g. opening `web/index.html` straight from disk) the board stays empty.
 - **Per-user board** — still maintained: the name prompt appears when the
   score makes *either* the shared board or the per-user top 10, so a
   locally notable score still gets a name.  In the browser build it lives in
@@ -244,12 +293,22 @@ docker compose up -d   # from the repo root
 
 Play at `http://localhost:8088/`.  Every runtime knob is set in `.env`
 (see `.env.example` and the `leaderboard.py` docstring): port, board size
-(`XGAL_MAX_HIGH_SCORES`), CORS origin, abuse limits.  Scores persist in
+(`XGAL_MAX_HIGH_SCORES`), CORS origin, abuse limits, the debug panel
+(`XGAL_DEBUG_PANEL`, off by default — see
+[Debug panel](#debug-panel)) and the trusted proxies
+(`XGAL_TRUSTED_PROXIES`).  Scores persist in
 the `./data` bind mount,
 which must be writable by uid 65534 (the `nobody` user the server runs
-as; `chmod 777 data` works for a single-user machine).  The server's code
-lives outside the served directory, so the public endpoint can only serve
-`index.html`, `debug_webui.js`, `settings_ui.js` and `xgalaga.js`.
+as; `chmod 777 data` works for a single-user machine — the server prints
+a warning at startup if it is not).  The server's code lives outside the
+served directory, so the public endpoint can only serve the six files in
+`web/`: `index.html`, `xgalaga.js`, `settings_ui.js`, `debug_webui.js`
+and the two icons.
+
+If you put a reverse proxy in front of the container (recommended for
+TLS), add the proxy's address to `XGAL_TRUSTED_PROXIES`, e.g.
+`XGAL_TRUSTED_PROXIES=172.16.0.0/12`.  Without it the server cannot see
+the real client addresses and every visitor shares one rate-limit bucket.
 
 ## Security
 
@@ -270,14 +329,24 @@ user-controllable).
 secret, the game code is public.  Mitigations in `leaderboard.py`:
 
 - per-IP rate limit on submissions (default 5 per 60 s → 429);
-  `X-Forwarded-For` is honored only from a local reverse proxy, so a remote
-  client can't spoof its address;
-- POST body cap (default 4 KiB → 413);
+  `X-Forwarded-For` is honored only from a proxy listed in
+  `XGAL_TRUSTED_PROXIES` (default: the loopback interface), and of the
+  forwarded addresses the **rightmost** one is used — that is the address
+  the proxy itself saw, so a client cannot pick its own rate-limit bucket
+  by putting a fake address at the front of the header;
+- POST body cap (default 4 KiB → 413); a submission must declare its
+  body length — a request with a chunked body or no `Content-Length` is
+  rejected with a 400 instead of being stored as a blank entry;
 - score/level clamped to sane ranges (defaults 10⁹ / 9999), names
-  truncated to 20 chars;
+  truncated to 19 chars (the game's score record keeps the name in a
+  20-byte field that must include a terminating NUL — the same limit the
+  native X11 build uses);
 - `XGAL_ORIGIN` (default `*`): set it to the game's origin when hosting,
   so unrelated websites can't read or flood the board through a player's
-  browser.
+  browser;
+- the debug panel is off by default (`XGAL_DEBUG_PANEL`): an enabled
+  panel lets its users set any level and equipment, so they can post
+  scores the board would otherwise not see.
 
 Remaining risks, and how to close them:
 
@@ -298,7 +367,11 @@ The port itself lives in `patches/0001-web-port.patch` (1336 lines, 13
 files); the equipment-indicator HUD, the title-screen layout (keybind
 list pitch, credits scroll over the live background, one-line control
 hint) and the debug panel's C bridge live in
-`patches/0002-debug-webui.patch` (`main.c` + `title.c`).  Both are
+`patches/0002-debug-webui.patch` (`main.c` + `title.c`); the score
+record's name-field terminator lives in
+`patches/0003-score-name-terminator.patch` (`highscore.c`); and the
+"a new game always starts unpaused" fix lives in
+`patches/0004-new-game-unpaused.patch` (`main.c`).  All four are
 applied, in order, to a throwaway copy of the tree at build time.
 
 ### Gameplay: per-level MINTORPS floors
@@ -448,10 +521,10 @@ interpretation:
 | `frate_web.c`       | `frate.c`               | `emscripten_sleep(16)` frame pacing (~60 FPS; original paces its 30 Hz tick with ITIMER_REAL/sigsuspend) |
 | `joystick_web.c`    | `linux-joystick.c`      | no-op (that file is `__linux__`-gated anyway) |
 | `leaderboard_web.c` | —                       | C↔JS bridge for the shared high-score board: `xgal_web_submit()` (C → JS fetch POST on name entry), `xgal_web_refresh()` (JS → C, reload the score board after the JS layer fetches it), `xgal_web_getting_name()` (JS → C, name-prompt state so the input bridge types literal characters) |
-| `webglue.js`        | —                       | browser side: keyboard/mouse → event queue, audio unlock/playback, canvas setup, blur keyup synthesis, leaderboard fetch/submit; prepended to `xgalaga.js` at build time |
-| `debug_webui.js`    | —                       | optional debug panel (gated by `XGAL_DEBUG_WEBUI`/`?debug`): polls `xgal_web_debug_state()` and drives the `xgal_web_debug_set_*` setters |
-| `leaderboard.py`    | —                       | self-hosted game + high-score API server (stdlib only); see High scores |
-| `index.html`        | —                       | page: canvas, 1 px grey border, integer-pixel fit scaling, single game script tag, links row (globe + author / "web source" + GitHub / "source" + SourceForge), and the `debug_webui.js` tag |
+| `webglue.js`        | —                       | browser side: keyboard/mouse → event queue (packed with BigInt, so no 32-bit truncation), audio unlock/playback, canvas setup, blur keyup synthesis, leaderboard fetch/submit; prepended to `xgalaga.js` at build time |
+| `debug_webui.js`    | —                       | optional debug panel: polls `xgal_web_debug_state()` and drives the `xgal_web_debug_set_*` setters; shown when the server says so (`XGAL_DEBUG_PANEL`), or with `?debug` when the page is served without `leaderboard.py` |
+| `leaderboard.py`    | —                       | self-hosted game + high-score API server (stdlib only); serves `web/`, exposes `/scores`; see High scores |
+| `web/index.html`    | —                       | page: canvas, 1 px grey border, integer-pixel fit scaling, single game script tag, links row (globe + author / "web source" + GitHub / "source" + SourceForge), and the `debug_webui.js` tag |
 | `favicon.ico`, `icon.png` | — | page favicon: the player-ship sprite (`images/player1.xpm`, frame 1) at 16/32/48/64 px (`.ico`) and 512 px (`.png`), nearest-neighbor scaled, transparency kept; the original X11 build sets no window icon, so this sprite is the game's canonical icon |
 | `config.h`          | `./configure` output    | hand-written build configuration (window size, score file paths, etc.) |
 | `CREDITS`           | `CREDITS` (in the game tree) | the scroll-credits text (identical copy), embedded at build time at `/tmp/xgal_credits` |

@@ -1,0 +1,14 @@
+diff -r base/xgalaga-2.1.1.0/main.c new/xgalaga-2.1.1.0/main.c
+--- base/xgalaga-2.1.1.0/main.c
++++ new/xgalaga-2.1.1.0/main.c
+@@ -943,6 +943,10 @@
+ static void start_new_game()
+ {
+     gameOver = 0;
++    paused = 0;   /* a new game always starts running: the pause flag can
++                    * still be set when a game ends (or by the debug
++                    * panel), and nothing else clears it, so the game
++                    * would otherwise come up frozen */
+     getting_name = 0;   /* the panel's New-game button bypasses the
+                          * name-prompt completion path */
+     plkeys = 0;   /* no stale key state: a movement key

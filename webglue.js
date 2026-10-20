@@ -12,13 +12,21 @@
     var mouse = { x: 0, y: 0, down: false };
     var canvas = null;
 
+    /* Pack an event into one 64-bit value: type (8) | key (10) | x (10) |
+     * y (10) | window index (4), read back by wlib_web.c's W_NextEvent().
+     *
+     * BigInt is required here: JavaScript's bitwise operators work on
+     * 32-bit integers, so `<< 28` and `<< 38` would truncate the value
+     * (the y coordinate was mangled above row 16) and the shift count of
+     * `<< 38` is masked to 6 bits, which would drop the window index
+     * into the type field.  The C side receives the value as a long long
+     * and the wasm boundary requires BigInt for 64-bit values anyway. */
     function pushEvent(type, key, x, y, idx) {
-        var v = type |
-            ((key & 0x3FF) << 8) |
-            ((x & 0x3FF) << 18) |
-            ((y & 0x3FF) << 28) |
-            ((idx & 0xF) << 38);
-        evq.push(v);
+        evq.push(BigInt(type & 0xFF) |
+            (BigInt(key & 0x3FF) << 8n) |
+            (BigInt(x & 0x3FF) << 18n) |
+            (BigInt(y & 0x3FF) << 28n) |
+            (BigInt(idx & 0xF) << 38n));
     }
 
     /* Non-zero while the high-score name prompt is up (queried from C via the
@@ -312,8 +320,11 @@
         img: null,
         audio: audio,
         pending: function () { return evq.length > 0; },
-        popEvent: function () { return evq.length ? evq.shift() : 0; },
-        pushExpose: function (idx) { pushEvent(1, 0, 0, idx); },
+        popEvent: function () { return evq.length ? evq.shift() : 0n; },
+        /* The window index goes in the index field of the packed event
+         * (wlib_web.c's W_NextEvent reads it from there to fill in
+         * event->Window), not in the y coordinate. */
+        pushExpose: function (idx) { pushEvent(1, 0, 0, 0, idx); },
         /* --- keymap API (used by settings_ui.js) --- */
         keymap: function () { return copyKeymap(keymap); },
         setBind: function (action, slot, key) {
@@ -345,9 +356,9 @@
             } catch (e) {}
         },
         getMouse: function () {
-            return ((mouse.x & 0x3FF) << 1) |
-                ((mouse.y & 0x3FF) << 17) |
-                (mouse.down ? 1 : 0);
+            return (BigInt(mouse.x & 0x3FF) << 1n) |
+                (BigInt(mouse.y & 0x3FF) << 17n) |
+                (mouse.down ? 1n : 0n);
         },
         toGame: function (e) {
             var r = canvas.getBoundingClientRect();
@@ -481,6 +492,7 @@
      * On a new high score: C's xgal_web_submit() calls __xgalSubmit to POST. */
     var LB_N = 20;                 /* NUM_GLOBAL_SCORES (web, highscore.c) */
     var LB_ENTRY = 28;             /* 20-byte name + 4-byte score + 4-byte level */
+    var LB_NAME = 20;              /* bytes reserved for the name field */
     var LB_FILE = '/tmp/xgal_global_scores'; /* == SCOREFILE (web/config.h) */
 
     function lbScoresUrl() {
@@ -508,9 +520,16 @@
                 for (var i = 0; i < LB_N; i++) {
                     var e = list[i] || {};
                     var name = String(e.name || '');
-                    for (var c = 0; c < 20; c++)
+                    /* The name field is a fixed 20-byte C array
+                     * (char name[20]) that the game prints with %s, so it
+                     * MUST end in a NUL: write at most 19 characters and
+                     * leave the last byte zero.  Without this, a 20-char
+                     * name left no terminator and the C side read past
+                     * the end of the field. */
+                    for (var c = 0; c < LB_NAME - 1; c++)
                         buf[i * LB_ENTRY + c] = c < name.length ? (name.charCodeAt(c) & 0xff) : 0;
-                    var s = e.score | 0, l = e.level | 0, o = i * LB_ENTRY + 20;
+                    buf[i * LB_ENTRY + LB_NAME - 1] = 0;
+                    var s = e.score | 0, l = e.level | 0, o = i * LB_ENTRY + LB_NAME;
                     buf[o + 0] = (s >>> 24) & 0xff; buf[o + 1] = (s >>> 16) & 0xff;
                     buf[o + 2] = (s >>> 8) & 0xff; buf[o + 3] = s & 0xff;
                     buf[o + 4] = (l >>> 24) & 0xff; buf[o + 5] = (l >>> 16) & 0xff;

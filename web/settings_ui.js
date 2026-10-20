@@ -260,11 +260,12 @@
 
         var hint = document.createElement("div");
         hint.className = "hint";
-        hint.textContent =
-            "Click a key slot, then press the key (Esc cancels). Letters," +
-            " numbers, arrows, space, shift and ctrl. No combinations." +
-            " The game pauses while this window is open; close it and" +
-            " press [p] to resume.";
+    hint.textContent =
+        "Click a key slot, then press the key (Esc cancels). Letters," +
+        " numbers, arrows, space, shift and ctrl. No combinations." +
+        " A game in progress pauses while this window is open; close it" +
+        " and press [p] to resume.";
+
         box.appendChild(hint);
 
         overlay.appendChild(box);

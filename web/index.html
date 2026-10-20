@@ -122,11 +122,18 @@
   // window.XGAL_LEADERBOARD_URL = "http://localhost:8088";
   /* Debug panel (debug_webui.js): in-browser game-state readouts and
    * controls (start level, weapon, torps, ships, shields, speed, pause).
-   * The panel exists only in bundles built with XGAL_DEBUG_PANEL=true
-   * (see build.sh); in such a bundle, enable it with either of the two
-   * below (otherwise the page behaves exactly as without the panel):
-   *   1) uncomment:  window.XGAL_DEBUG_WEBUI = true;
-   *   2) open the page with ?debug in the URL
+   *
+   * The panel's code is always compiled into the bundle (see build.sh);
+   * whether it is SHOWN is decided by the server: leaderboard.py reads
+   * the XGAL_DEBUG_PANEL environment variable and passes the result to
+   * this page as window.XGAL_DEBUG_WEBUI (true/false).  The value below
+   * is a manual override for when the page is served WITHOUT
+   * leaderboard.py (any static file server), and it wins over the
+   * server's value because it runs later:
+   *   - uncomment the next line to force the panel on, or
+   *   - open the page with ?debug in the URL.
+   * A deployment that serves the page through leaderboard.py with
+   * XGAL_DEBUG_PANEL=false keeps the panel off regardless of ?debug.
    */
   // window.XGAL_DEBUG_WEBUI = true;
   var Module = {
